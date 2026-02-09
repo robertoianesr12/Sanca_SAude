@@ -3,6 +3,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Star } from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { showSuccess } from "@/utils/toast";
 
 interface MenuItem {
   id: number;
@@ -18,8 +20,15 @@ interface MenuItemCardProps {
 }
 
 const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
+  const { addItem } = useCart();
+
   const formatPrice = (price: number) => 
     price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const handleAddItem = () => {
+    addItem({ id: item.id, name: item.name, price: item.price });
+    showSuccess(`${item.name} adicionado ao carrinho!`);
+  };
 
   return (
     <Card className="overflow-hidden rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] border-primary/20">
@@ -50,7 +59,10 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
         <span className="text-3xl font-extrabold text-foreground">
           {formatPrice(item.price)}
         </span>
-        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-transform duration-200 hover:scale-[1.05]">
+        <Button 
+          onClick={handleAddItem}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-transform duration-200 hover:scale-[1.05]"
+        >
           <ShoppingCart className="h-4 w-4 mr-2" /> Adicionar
         </Button>
       </CardFooter>
