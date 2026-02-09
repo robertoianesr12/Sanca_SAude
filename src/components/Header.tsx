@@ -1,9 +1,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, Utensils } from "lucide-react";
+import { Menu, Utensils, ShoppingCart } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/context/CartContext";
+import CartDrawer from "./CartDrawer";
 
 const navItems = [
   { name: "Cardápio", href: "/menu" },
@@ -13,6 +15,9 @@ const navItems = [
 ];
 
 const Header = () => {
+  const { items } = useCart();
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-8">
@@ -38,36 +43,62 @@ const Header = () => {
               {item.name}
             </Link>
           ))}
+          
+          {/* Cart Button */}
+          <CartDrawer>
+            <Button variant="ghost" size="icon" className="relative hover:bg-primary/10">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 bg-accent text-primary text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full border-2 border-background">
+                  {totalItems}
+                </span>
+              )}
+            </Button>
+          </CartDrawer>
+
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-lg transition-transform duration-300 hover:scale-[1.02]">
             <Link to="/order">Peça Agora!</Link>
           </Button>
         </nav>
 
         {/* Mobile Navigation */}
-        <Sheet>
-          <SheetTrigger asChild className="md:hidden">
-            <Button variant="outline" size="icon">
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Toggle Menu</span>
+        <div className="flex items-center space-x-2 md:hidden">
+          <CartDrawer>
+            <Button variant="ghost" size="icon" className="relative">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 bg-accent text-primary text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full border-2 border-background">
+                  {totalItems}
+                </span>
+              )}
             </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-secondary/95">
-            <div className="flex flex-col space-y-4 pt-6">
-              {navItems.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className="text-lg font-semibold text-foreground hover:text-primary transition-colors"
-                >
-                  {item.name}
-                </Link>
-              ))}
-              <Button asChild className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg">
-                <Link to="/order">Peça Agora!</Link>
+          </CartDrawer>
+          
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle Menu</span>
               </Button>
-            </div>
-          </SheetContent>
-        </Sheet>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-secondary/95">
+              <div className="flex flex-col space-y-4 pt-6">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className="text-lg font-semibold text-foreground hover:text-primary transition-colors"
+                  >
+                    {item.name}
+                  </Link>
+                ))}
+                <Button asChild className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg">
+                  <Link to="/order">Peça Agora!</Link>
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
     </header>
   );
