@@ -3,11 +3,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReservationForm from "./ReservationForm";
 import OnlineOrderForm from "./OnlineOrderForm";
 import { CalendarCheck, ShoppingCart } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 
 const OrderSection = () => {
+  const { clearCart } = useCart();
+
   return (
     <section className="container max-w-4xl py-8">
-      <Tabs defaultValue="reservation" className="w-full">
+      <Tabs 
+        defaultValue="reservation" 
+        className="w-full"
+        onValueChange={(value) => {
+            if (value === "reservation") {
+                clearCart();
+            }
+        }}
+      >
         <TabsList className="grid w-full grid-cols-2 h-auto p-1 bg-secondary rounded-xl shadow-inner">
           <TabsTrigger 
             value="reservation" 

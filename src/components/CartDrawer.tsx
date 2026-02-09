@@ -98,7 +98,7 @@ const CartDrawer = ({ children }: { children: React.ReactNode }) => {
               </span>
             </div>
             <Button asChild className="w-full bg-primary hover:bg-primary/90 text-lg font-bold py-6 rounded-xl shadow-lg">
-              <Link to="/order">Finalizar Pedido</Link>
+              <Link to="/checkout">Finalizar Pedido</Link>
             </Button>
           </SheetFooter>
         )}

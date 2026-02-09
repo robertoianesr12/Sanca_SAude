@@ -57,7 +57,7 @@ const Header = () => {
           </CartDrawer>
 
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-lg transition-transform duration-300 hover:scale-[1.02]">
-            <Link to="/order">Peça Agora!</Link>
+            <Link to="/checkout">Peça Agora!</Link>
           </Button>
         </nav>
 
@@ -93,7 +93,7 @@ const Header = () => {
                   </Link>
                 ))}
                 <Button asChild className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg">
-                  <Link to="/order">Peça Agora!</Link>
+                  <Link to="/checkout">Peça Agora!</Link>
                 </Button>
               </div>
             </SheetContent>
