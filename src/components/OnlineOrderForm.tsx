@@ -54,7 +54,7 @@ const OnlineOrderForm = () => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         
-        {/* Cart Summary - Always visible and prominent */}
+        {/* Cart Summary Section */}
         <div className="space-y-4 p-6 border-2 border-primary/20 rounded-2xl bg-secondary/30 shadow-inner">
             <h4 className="text-2xl font-bold text-primary flex items-center">
                 <ShoppingBag className="h-6 w-6 mr-2" /> Resumo do Pedido
@@ -63,7 +63,7 @@ const OnlineOrderForm = () => {
             {items.length === 0 ? (
                 <div className="text-center py-8">
                     <p className="text-lg text-muted-foreground mb-4">Seu carrinho está vazio no momento.</p>
-                    <Button onClick={() => navigate("/menu")} variant="outline" className="rounded-full border-primary text-primary">
+                    <Button type="button" onClick={() => navigate("/menu")} variant="outline" className="rounded-full border-primary text-primary">
                         Ir para o Cardápio
                     </Button>
                 </div>

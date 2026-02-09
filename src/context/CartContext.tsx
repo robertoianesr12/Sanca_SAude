@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 
 interface CartItem {
   id: number;
@@ -19,7 +19,16 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>([]);
+  // Initialize state from localStorage if available
+  const [items, setItems] = useState<CartItem[]>(() => {
+    const savedCart = localStorage.getItem('trembao_cart');
+    return savedCart ? JSON.parse(savedCart) : [];
+  });
+
+  // Save to localStorage whenever items change
+  useEffect(() => {
+    localStorage.setItem('trembao_cart', JSON.stringify(items));
+  }, [items]);
 
   const total = useMemo(() => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -51,7 +60,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ));
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    localStorage.removeItem('trembao_cart');
+  };
 
   const value = useMemo(() => ({
     items,
