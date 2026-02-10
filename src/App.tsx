@@ -28,7 +28,8 @@ const App = () => (
             <Route path="/order" element={<Order />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/contact" element={<Contact />} />
-            <Route path="/login" element={<Login />} />
+            {/* URL Oculta para Login Administrativo */}
+            <Route path="/acesso-restrito-trembao" element={<Login />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

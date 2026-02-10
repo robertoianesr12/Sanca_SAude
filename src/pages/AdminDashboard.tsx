@@ -30,11 +30,11 @@ const AdminDashboard = () => {
     const initialize = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        navigate("/login");
+        // Redireciona para a URL oculta se não houver sessão
+        navigate("/acesso-restrito-trembao");
         return;
       }
 
-      // Buscar o perfil para saber a empresa
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
@@ -42,14 +42,15 @@ const AdminDashboard = () => {
         .single();
 
       if (profileError || !profile) {
-        showError("Perfil não encontrado. Contate o suporte.");
+        showError("Acesso negado. Perfil não configurado.");
+        await supabase.auth.signOut();
+        navigate("/acesso-restrito-trembao");
         return;
       }
 
       setCompanyId(profile.company_id);
       fetchOrders(profile.company_id);
 
-      // Real-time subscription filtrada por empresa
       const channel = supabase
         .channel('orders-changes')
         .on('postgres_changes', 
@@ -102,7 +103,7 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/login");
+    navigate("/acesso-restrito-trembao");
   };
 
   const formatPrice = (price: number) => 
@@ -130,14 +131,14 @@ const AdminDashboard = () => {
 
         {loading ? (
           <div className="flex justify-center py-20">
-            <p className="text-muted-foreground animate-pulse">Carregando pedidos da sua empresa...</p>
+            <p className="text-muted-foreground animate-pulse">Carregando pedidos...</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
             {orders.length === 0 ? (
               <div className="text-center py-20 bg-secondary/20 rounded-3xl border-2 border-dashed border-primary/20">
                 <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-20" />
-                <p className="text-xl text-muted-foreground">Nenhum pedido recebido para esta empresa.</p>
+                <p className="text-xl text-muted-foreground">Nenhum pedido recebido.</p>
               </div>
             ) : (
               orders.map((order) => (
