@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ShoppingBag, MapPin, CreditCard, Minus, Plus, Trash2 } from "lucide-react";
+import { ShoppingBag, MapPin, CreditCard, Minus, Plus, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,13 @@ import { useCart } from "@/context/CartContext";
 import { useNavigate } from "react-router-dom";
 
 const orderSchema = z.object({
-  address: z.string().min(10, { message: "Endereço completo é obrigatório." }),
+  cep: z.string().min(8, { message: "CEP deve ter 8 dígitos." }).max(9),
+  street: z.string().min(3, { message: "Rua é obrigatória." }),
+  number: z.string().min(1, { message: "Número é obrigatório." }),
+  complement: z.string().optional(),
+  neighborhood: z.string().min(2, { message: "Bairro é obrigatório." }),
+  city: z.string().min(2, { message: "Cidade é obrigatória." }),
+  state: z.string().length(2, { message: "UF inválida." }),
   phone: z.string().min(8, { message: "Telefone é obrigatório." }),
   paymentMethod: z.enum(["pix", "card", "cash"], { required_error: "Método de pagamento é obrigatório." }),
   notes: z.string().optional(),
@@ -27,12 +33,49 @@ const OnlineOrderForm = () => {
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema),
     defaultValues: {
-      address: "",
+      cep: "",
+      street: "",
+      number: "",
+      complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
       phone: "",
       paymentMethod: "card",
       notes: "",
     },
   });
+
+  const { setValue, watch } = form;
+  const cepValue = watch("cep");
+
+  // Effect to fetch address when CEP is valid
+  useEffect(() => {
+    const fetchAddress = async (cep: string) => {
+      const cleanCep = cep.replace(/\D/g, "");
+      if (cleanCep.length === 8) {
+        try {
+          const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+          const data = await response.json();
+
+          if (data.erro) {
+            showError("CEP não encontrado.");
+            return;
+          }
+
+          setValue("street", data.logradouro);
+          setValue("neighborhood", data.bairro);
+          setValue("city", data.localidade);
+          setValue("state", data.uf);
+          showSuccess("Endereço preenchido automaticamente!");
+        } catch (error) {
+          showError("Erro ao buscar CEP. Tente preencher manualmente.");
+        }
+      }
+    };
+
+    fetchAddress(cepValue);
+  }, [cepValue, setValue]);
 
   const formatPrice = (price: number) => 
     price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -43,8 +86,10 @@ const OnlineOrderForm = () => {
         return;
     }
     
-    console.log("Order Data:", data, "Total:", total);
-    showSuccess(`Pedido de ${formatPrice(total)} enviado com sucesso! Acompanhe o status por SMS.`);
+    const fullAddress = `${data.street}, ${data.number} ${data.complement ? `- ${data.complement}` : ""} - ${data.neighborhood}, ${data.city}/${data.state}`;
+    console.log("Order Data:", { ...data, fullAddress }, "Total:", total);
+    
+    showSuccess(`Pedido de ${formatPrice(total)} enviado com sucesso! Entregaremos em: ${data.street}, ${data.number}`);
     clearCart();
     form.reset();
     navigate("/");
@@ -119,43 +164,138 @@ const OnlineOrderForm = () => {
         
         {items.length > 0 && (
             <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                    {/* Delivery Info */}
                     <div className="space-y-6">
-                        <h4 className="text-xl font-semibold text-primary border-b pb-2">Dados de Entrega</h4>
+                        <h4 className="text-xl font-semibold text-primary border-b pb-2 flex items-center">
+                            <MapPin className="h-5 w-5 mr-2" /> Dados de Entrega
+                        </h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="cep"
+                                render={({ field }) => (
+                                    <FormItem className="col-span-1">
+                                        <FormLabel>CEP</FormLabel>
+                                        <FormControl>
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                <Input placeholder="00000-000" {...field} className="pl-10 rounded-xl h-12" maxLength={9} />
+                                            </div>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormItem className="col-span-1">
+                                        <FormLabel>Telefone</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="(11) 98765-4321" type="tel" {...field} className="rounded-xl h-12" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
                         <FormField
                             control={form.control}
-                            name="address"
+                            name="street"
                             render={({ field }) => (
                                 <FormItem>
-                                <FormLabel>Endereço Completo</FormLabel>
-                                <FormControl>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                        <Textarea placeholder="Rua, número, bairro, cidade e ponto de referência" {...field} className="pl-10 rounded-xl min-h-[100px]" />
-                                    </div>
-                                </FormControl>
-                                <FormMessage />
+                                    <FormLabel>Rua / Logradouro</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Rua das Flores" {...field} className="rounded-xl h-12" />
+                                    </FormControl>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="phone"
-                            render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>Telefone de Contato</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="(11) 98765-4321" type="tel" {...field} className="rounded-xl h-12" />
-                                </FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        <div className="grid grid-cols-3 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="number"
+                                render={({ field }) => (
+                                    <FormItem className="col-span-1">
+                                        <FormLabel>Número</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="123" {...field} className="rounded-xl h-12" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="complement"
+                                render={({ field }) => (
+                                    <FormItem className="col-span-2">
+                                        <FormLabel>Complemento</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Apto, Bloco, etc." {...field} className="rounded-xl h-12" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="neighborhood"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Bairro</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Centro" {...field} className="rounded-xl h-12" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                                <FormField
+                                    control={form.control}
+                                    name="city"
+                                    render={({ field }) => (
+                                        <FormItem className="col-span-2">
+                                            <FormLabel>Cidade</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="São Paulo" {...field} className="rounded-xl h-12" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="state"
+                                    render={({ field }) => (
+                                        <FormItem className="col-span-1">
+                                            <FormLabel>UF</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="SP" {...field} className="rounded-xl h-12 uppercase" maxLength={2} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </div>
                     </div>
 
+                    {/* Payment & Notes */}
                     <div className="space-y-6">
-                        <h4 className="text-xl font-semibold text-primary border-b pb-2">Pagamento & Notas</h4>
+                        <h4 className="text-xl font-semibold text-primary border-b pb-2 flex items-center">
+                            <CreditCard className="h-5 w-5 mr-2" /> Pagamento & Notas
+                        </h4>
                         <FormField
                             control={form.control}
                             name="paymentMethod"
@@ -189,7 +329,7 @@ const OnlineOrderForm = () => {
                                 <FormItem>
                                 <FormLabel>Observações do Pedido</FormLabel>
                                 <FormControl>
-                                    <Textarea placeholder="Ex: Retirar cebola, trocar molho..." {...field} className="rounded-xl min-h-[80px]" />
+                                    <Textarea placeholder="Ex: Retirar cebola, trocar molho..." {...field} className="rounded-xl min-h-[120px]" />
                                 </FormControl>
                                 <FormMessage />
                                 </FormItem>
