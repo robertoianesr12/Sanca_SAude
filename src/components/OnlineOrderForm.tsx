@@ -12,6 +12,9 @@ import { useCart } from "@/context/CartContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
+// Identificador desta instância da empresa
+const COMPANY_ID = "trembao";
+
 const orderSchema = z.object({
   name: z.string().min(2, { message: "Nome é obrigatório." }),
   cep: z.string().min(8, { message: "CEP deve ter 8 dígitos." }).max(9),
@@ -68,7 +71,6 @@ const OnlineOrderForm = () => {
           setValue("neighborhood", data.bairro);
           setValue("city", data.localidade);
           setValue("state", data.uf);
-          showSuccess("Endereço preenchido automaticamente!");
         } catch (error) {
           showError("Erro ao buscar CEP.");
         }
@@ -99,11 +101,12 @@ const OnlineOrderForm = () => {
         total: total,
         payment_method: data.paymentMethod,
         notes: data.notes,
-        status: 'pendente'
+        status: 'pendente',
+        company_id: COMPANY_ID // Enviando o ID da empresa
       });
 
     if (error) {
-      showError("Erro ao enviar pedido. Tente novamente.");
+      showError("Erro ao enviar pedido.");
       console.error(error);
     } else {
       showSuccess(`Pedido enviado com sucesso!`);
@@ -117,7 +120,6 @@ const OnlineOrderForm = () => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Resumo do Pedido */}
         <div className="space-y-4 p-6 border-2 border-primary/20 rounded-2xl bg-secondary/30 shadow-inner">
             <h4 className="text-2xl font-bold text-primary flex items-center">
                 <ShoppingBag className="h-6 w-6 mr-2" /> Resumo do Pedido
