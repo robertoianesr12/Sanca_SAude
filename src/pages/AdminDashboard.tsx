@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/utils/toast";
 import { useNavigate } from "react-router-dom";
-import { Package, Clock, CheckCircle, LogOut, Building } from "lucide-center";
+import { Package, Clock, CheckCircle, LogOut, Building } from "lucide-react";
 
 interface Order {
   id: string;
