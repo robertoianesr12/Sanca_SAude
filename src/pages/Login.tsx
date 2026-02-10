@@ -29,19 +29,21 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        showError("E-mail ou senha inválidos.");
-      } else {
+        // Mostra o erro real do Supabase (ex: "Email not confirmed" ou "Invalid login credentials")
+        showError(error.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : error.message);
+        console.error("Erro de login:", error);
+      } else if (data.user) {
         showSuccess("Login realizado com sucesso!");
         navigate("/admin");
       }
     } catch (err) {
-      showError("Ocorreu um erro ao tentar entrar.");
+      showError("Ocorreu um erro inesperado.");
     } finally {
       setLoading(false);
     }
