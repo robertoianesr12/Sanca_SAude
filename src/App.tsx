@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ClinicIndex from "./pages/ClinicIndex";
 import PatientPortal from "./pages/PatientPortal";
 import ClinicAdmin from "./pages/ClinicAdmin";
+import Services from "./pages/Services";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -20,6 +21,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<ClinicIndex />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/servicos" element={<Services />} />
           <Route path="/portal" element={<PatientPortal />} />
           <Route path="/admin" element={<ClinicAdmin />} />
           <Route path="*" element={<NotFound />} />
