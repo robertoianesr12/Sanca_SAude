@@ -34,31 +34,29 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   useEffect(() => {
     const fetchQualifiedDoctors = async () => {
       if (!service?.specialty_id) {
-        // Se o serviço não tiver especialidade vinculada, busca todos os médicos
         const { data } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .eq('role', 'doctor');
+          .from("profiles")
+          .select("id, full_name")
+          .eq("role", "doctor");
         setDoctors(data || []);
         return;
       }
 
       setFetchingDoctors(true);
-      // Busca médicos que pertencem à especialidade do serviço
       const { data, error } = await supabase
-        .from('doctors')
+        .from("doctors")
         .select(`
           id,
           profiles:id (
             full_name
           )
         `)
-        .eq('specialty_id', service.specialty_id);
+        .eq("specialty_id", service.specialty_id);
 
       if (!error && data) {
         const formattedDoctors = data.map((d: any) => ({
           id: d.id,
-          full_name: d.profiles.full_name
+          full_name: d.profiles?.full_name ?? "Especialista disponível",
         }));
         setDoctors(formattedDoctors);
       }
@@ -84,17 +82,17 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     }
 
     const appointmentDate = new Date(selectedDate);
-    const [hours, minutes] = selectedTime.split(':');
+    const [hours, minutes] = selectedTime.split(":");
     appointmentDate.setHours(parseInt(hours), parseInt(minutes));
 
     const { error } = await supabase
-      .from('appointments')
+      .from("appointments")
       .insert({
         patient_id: user.id,
         service_id: service.id,
         doctor_id: selectedDoctor,
         appointment_date: appointmentDate.toISOString(),
-        status: 'scheduled'
+        status: "scheduled",
       });
 
     if (error) {
@@ -118,9 +116,7 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
             </div>
             <div>
               <DialogTitle className="text-2xl font-bold text-slate-900">Agendar {service?.name}</DialogTitle>
-              <DialogDescription>
-                Selecione um especialista disponível.
-              </DialogDescription>
+              <DialogDescription>Selecione um especialista disponível.</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -173,8 +169,8 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
                   variant={selectedTime === time ? "default" : "outline"}
                   className={`rounded-xl h-11 font-medium transition-all ${
                     selectedTime === time 
-                    ? 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200' 
-                    : 'hover:border-blue-200 hover:bg-blue-50'
+                    ? "bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200" 
+                    : "hover:border-blue-200 hover:bg-blue-50"
                   }`}
                   onClick={() => setSelectedTime(time)}
                 >
