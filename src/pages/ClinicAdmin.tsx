@@ -8,10 +8,12 @@ import { Users, Calendar, Activity, LogOut, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { showError, showSuccess } from "@/utils/toast";
+import CalendarBoard from "@/components/CalendarBoard";
 
 const ClinicAdmin = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, pending: 0 });
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,6 +42,7 @@ const ClinicAdmin = () => {
   }, [navigate]);
 
   const fetchData = async () => {
+    setLoadingAppointments(true);
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -49,13 +52,18 @@ const ClinicAdmin = () => {
       `)
       .order('appointment_date', { ascending: true });
 
-    if (!error) {
-      setAppointments(data || []);
-      setStats({
-        total: data?.length || 0,
-        pending: data?.filter(a => a.status === 'scheduled').length || 0
-      });
+    setLoadingAppointments(false);
+
+    if (error) {
+      showError("Falha ao carregar agendamentos.");
+      return;
     }
+
+    setAppointments(data || []);
+    setStats({
+      total: data?.length || 0,
+      pending: data?.filter((a) => a.status === 'scheduled').length || 0
+    });
   };
 
   const completeAppointment = async (id: string) => {
@@ -75,15 +83,17 @@ const ClinicAdmin = () => {
     <div className="min-h-screen bg-slate-50 py-12">
       <div className="container">
         <div className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-extrabold text-slate-900 flex items-center">
-            <Activity className="mr-3 h-8 w-8 text-blue-600" /> Painel Clínico
+          <h1 className="text-4xl font-extrabold text-slate-900 flex items-center gap-3">
+            <Activity className="h-8 w-8 text-blue-600" /> Painel Clínico
           </h1>
           <Button variant="outline" onClick={() => supabase.auth.signOut().then(() => navigate("/"))}>
             <LogOut className="mr-2 h-4 w-4" /> Sair
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <CalendarBoard appointments={appointments} onReschedule={fetchData} />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 mt-10">
           <Card className="bg-blue-600 text-white border-none shadow-xl">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium opacity-80">Total de Agendamentos</CardTitle>
@@ -130,7 +140,7 @@ const ClinicAdmin = () => {
                 <TableCell>{app.services?.name}</TableCell>
                 <TableCell>{format(new Date(app.appointment_date), 'dd/MM/yyyy HH:mm')}</TableCell>
                 <TableCell>
-                  <Badge variant={app.status === 'scheduled' ? 'default' : 'secondary'} className={app.status === 'scheduled' ? 'bg-blue-500' : ''}>
+                  <Badge variant={app.status === 'scheduled' ? 'default' : 'outline'} className={app.status === 'scheduled' ? 'bg-blue-500 text-white' : ''}>
                     {app.status}
                   </Badge>
                 </TableCell>
