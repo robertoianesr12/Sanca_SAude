@@ -1,21 +1,25 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription, 
-  DialogFooter 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
 import { Loader2, CalendarDays, User, Clock, Stethoscope } from "lucide-react";
+import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 interface BookingModalProps {
   service: any;
@@ -26,169 +30,260 @@ interface BookingModalProps {
 const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   const [doctors, setDoctors] = useState<any[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [fetchingDoctors, setFetchingDoctors] = useState(false);
+  const [contactName, setContactName] = useState("");
+  const [contactCpf, setContactCpf] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   useEffect(() => {
     const fetchQualifiedDoctors = async () => {
-      if (!service?.specialty_id) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .eq("role", "doctor");
-        setDoctors(data || []);
-        return;
-      }
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .eq("role", "doctor");
 
-      setFetchingDoctors(true);
-      const { data, error } = await supabase
-        .from("doctors")
-        .select(`
-          id,
-          profiles:id (
-            full_name
-          )
-        `)
-        .eq("specialty_id", service.specialty_id);
-
-      if (!error && data) {
-        const formattedDoctors = data.map((d: any) => ({
-          id: d.id,
-          full_name: d.profiles?.full_name ?? "Especialista disponível",
-        }));
-        setDoctors(formattedDoctors);
-      }
-      setFetchingDoctors(false);
+      setDoctors(data || []);
     };
 
-    if (isOpen && service) fetchQualifiedDoctors();
-  }, [isOpen, service]);
+    if (isOpen) {
+      fetchQualifiedDoctors();
+    }
+  }, [isOpen]);
+
+  const formatPreviewDate = () => {
+    if (!selectedTime) return "Horário pendente";
+    return `${format(selectedDate, "dd/MM/yyyy")} às ${selectedTime}`;
+  };
 
   const handleBooking = async () => {
-    if (!selectedDoctor || !selectedDate || !selectedTime) {
-      showError("Por favor, preencha todos os campos.");
+    if (!contactName.trim() || !contactCpf.trim() || !contactPhone.trim()) {
+      showError("Preencha Nome, CPF e Telefone.");
       return;
     }
 
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    if (!selectedTime) {
+      showError("Escolha um horário disponível.");
+      return;
+    }
 
-    if (!user) {
-      showError("Você precisa estar logado para agendar.");
-      setLoading(false);
+    const cpfDigits = stripNonDigits(contactCpf);
+    const phoneDigits = stripNonDigits(contactPhone);
+
+    if (cpfDigits.length !== 11) {
+      showError("CPF inválido.");
+      return;
+    }
+
+    const [hours, minutes] = selectedTime.split(":").map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      showError("Horário inválido.");
       return;
     }
 
     const appointmentDate = new Date(selectedDate);
-    const [hours, minutes] = selectedTime.split(":");
-    appointmentDate.setHours(parseInt(hours), parseInt(minutes));
+    appointmentDate.setHours(hours, minutes, 0, 0);
 
-    const { error } = await supabase
-      .from("appointments")
-      .insert({
-        patient_id: user.id,
-        service_id: service.id,
-        doctor_id: selectedDoctor,
-        appointment_date: appointmentDate.toISOString(),
-        status: "scheduled",
-      });
+    setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("appointments").insert({
+      service_id: service?.id,
+      doctor_id: selectedDoctor || null,
+      appointment_date: appointmentDate.toISOString(),
+      status: user ? "scheduled" : "requested",
+      patient_id: user?.id ?? null,
+      notes: JSON.stringify({
+        source: user ? "auth" : "walk-in",
+        contact: {
+          name: contactName.trim(),
+          cpf: cpfDigits,
+          phone: phoneDigits,
+        },
+        requestedAt: new Date().toISOString(),
+        requestedTime: selectedTime,
+      }),
+    });
+
+    setLoading(false);
 
     if (error) {
-      showError("Erro ao realizar agendamento.");
-    } else {
-      showSuccess("Consulta agendada com sucesso!");
-      onClose();
+      showError("Erro ao registrar a consulta.");
+      console.error("BookingModal", error);
+      return;
     }
-    setLoading(false);
+
+    showSuccess("Consulta registrada! Nossa equipe confirmará em breve.");
+    setContactName("");
+    setContactCpf("");
+    setContactPhone("");
+    setSelectedTime("");
+    setSelectedDoctor("");
+    setSelectedDate(new Date());
   };
 
-  const timeSlots = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
+  const timeSlots = [
+    "08:00",
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
+  ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] overflow-y-auto max-h-[90vh] rounded-[2rem]">
+      <DialogContent className="sm:max-w-[520px] rounded-[2rem] border border-border shadow-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-3 bg-blue-50 rounded-2xl">
+            <div className="rounded-2xl bg-blue-50 p-3">
               <Stethoscope className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <DialogTitle className="text-2xl font-bold text-slate-900">Agendar {service?.name}</DialogTitle>
-              <DialogDescription>Selecione um especialista disponível.</DialogDescription>
+              <DialogTitle className="text-2xl font-extrabold text-foreground">Agendar {service?.name}</DialogTitle>
+              <DialogDescription>
+                Preencha Nome, CPF e Telefone — não é necessário fazer login. Receberemos a solicitação e confirmaremos o horário.
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-slate-700 font-semibold">
-              <User className="h-4 w-4 text-blue-500" /> Profissional Especialista
-            </Label>
-            <Select onValueChange={setSelectedDoctor} disabled={fetchingDoctors}>
-              <SelectTrigger className="rounded-xl border-slate-200 h-12">
-                <SelectValue placeholder={fetchingDoctors ? "Buscando especialistas..." : "Escolha um profissional"} />
-              </SelectTrigger>
-              <SelectContent>
-                {doctors.length > 0 ? (
-                  doctors.map((doc) => (
-                    <SelectItem key={doc.id} value={doc.id}>{doc.full_name}</SelectItem>
-                  ))
-                ) : (
-                  <div className="p-4 text-sm text-slate-500 text-center">Nenhum especialista encontrado para este serviço.</div>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-slate-700 font-semibold">
-              <CalendarDays className="h-4 w-4 text-blue-500" /> Data da Consulta
-            </Label>
-            <div className="border border-slate-100 rounded-3xl p-2 bg-slate-50/50 flex justify-center">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                disabled={(date) => date < new Date() || date.getDay() === 0}
-                locale={ptBR}
-                className="rounded-md"
+        <div className="space-y-6 py-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">Nome Completo</label>
+              <Input
+                placeholder="Maria Silva"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                className="rounded-xl h-12"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">CPF</label>
+              <Input
+                placeholder="000.000.000-00"
+                value={contactCpf}
+                onChange={(e) => setContactCpf(formatCpf(e.target.value))}
+                className="rounded-xl h-12"
+                maxLength={14}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-slate-700 font-semibold">
-              <Clock className="h-4 w-4 text-blue-500" /> Horários Disponíveis
-            </Label>
-            <div className="grid grid-cols-4 gap-2">
-              {timeSlots.map((time) => (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">Telefone</label>
+              <Input
+                placeholder="(11) 98765-4321"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(formatPhone(e.target.value))}
+                className="rounded-xl h-12"
+                maxLength={16}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">Especialista (opcional)</label>
+              <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                <SelectTrigger className="rounded-xl h-12">
+                  <SelectValue placeholder="Selecione um profissional" />
+                </SelectTrigger>
+                <SelectContent>
+                  {doctors.map((doctor) => (
+                    <SelectItem key={doctor.id} value={doctor.id}>
+                      {doctor.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted-foreground block mb-1">Data da Consulta</label>
+            <div className="border border-border/60 rounded-3xl p-2 bg-background">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                disabled={(date) => date < new Date()}
+                className="rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Horários disponíveis</p>
+                <p className="text-xs text-muted-foreground">Clique para escolher um horário.</p>
+              </div>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {timeSlots.map((slot) => (
                 <Button
-                  key={time}
-                  variant={selectedTime === time ? "default" : "outline"}
-                  className={`rounded-xl h-11 font-medium transition-all ${
-                    selectedTime === time 
-                    ? "bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200" 
-                    : "hover:border-blue-200 hover:bg-blue-50"
-                  }`}
-                  onClick={() => setSelectedTime(time)}
+                  key={slot}
+                  variant={selectedTime === slot ? "default" : "outline"}
+                  className={`rounded-2xl text-sm h-10 ${selectedTime === slot ? "bg-blue-600 text-white" : "border-border/60"}`}
+                  onClick={() => setSelectedTime(slot)}
                 >
-                  {time}
+                  {slot}
                 </Button>
               ))}
             </div>
           </div>
+
+          <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4 shadow-inner">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-foreground">Prévia do atendimento</p>
+              <Badge className="border border-border/30 bg-background text-sm text-foreground">
+                {selectedTime ? "Solicitação" : "Preenchimento"}
+              </Badge>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>CPF</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Serviço</TableHead>
+                  <TableHead>Data/Hora</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell>{contactName || "—"}</TableCell>
+                  <TableCell>{contactCpf || "—"}</TableCell>
+                  <TableCell>{contactPhone || "—"}</TableCell>
+                  <TableCell>{service?.name || "—"}</TableCell>
+                  <TableCell>{formatPreviewDate()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
 
-        <DialogFooter className="sm:justify-center">
-          <Button 
-            className="w-full bg-slate-900 hover:bg-blue-600 py-7 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95"
+        <DialogFooter className="flex-col gap-3">
+          <Button
             onClick={handleBooking}
-            disabled={loading || doctors.length === 0}
+            disabled={loading}
+            className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold text-lg shadow-lg"
           >
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Confirmar Agendamento"}
+            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Enviar solicitação"}
           </Button>
+          <p className="text-xs text-muted-foreground text-center px-6">
+            Consulta agendada por um de nossos especialistas de plantão. Caso necessite reagendar, o admin poderá mover manualmente.
+          </p>
         </DialogFooter>
       </DialogContent>
     </Dialog>
