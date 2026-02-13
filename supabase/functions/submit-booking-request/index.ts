@@ -20,7 +20,7 @@ serve(async (req) => {
     const body = await req.json()
     const { service_id, doctor_id, appointment_date, contact, source, patient_id } = body
 
-    console.log("[submit-booking-request] Iniciando processamento:", { cpf: contact?.cpf });
+    console.log("[submit-booking-request] Iniciando processamento:", { service_id, cpf: contact?.cpf });
 
     if (!service_id || !contact?.cpf || !contact?.name) {
       return new Response(JSON.stringify({ error: 'Dados do cliente ou serviço ausentes' }), {
@@ -29,8 +29,21 @@ serve(async (req) => {
       })
     }
 
-    // 1. Gerenciar o Cadastro do Cliente (Validando pelo CPF)
-    // Tentamos encontrar o cliente ou criar um novo
+    // 1. Buscar o nome do serviço/especialidade
+    const { data: serviceData, error: serviceError } = await supabaseAdmin
+      .from('services')
+      .select('name')
+      .eq('id', service_id)
+      .single()
+
+    if (serviceError || !serviceData) {
+      console.error("[submit-booking-request] Erro ao buscar serviço:", serviceError);
+      throw new Error("Serviço não encontrado no sistema.");
+    }
+
+    const serviceName = serviceData.name;
+
+    // 2. Gerenciar o Cadastro do Cliente (Validando pelo CPF)
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
       .upsert({ 
@@ -50,26 +63,27 @@ serve(async (req) => {
       throw new Error("Falha ao registrar dados do paciente.");
     }
 
-    // 2. Criar o Agendamento vinculado ao Cliente
+    // 3. Criar o Agendamento com o nome da especialidade
     const notesPayload = {
-      schema: "booking_request_v2",
+      schema: "booking_request_v3",
       source: source || "web_portal",
       requestedAt: new Date().toISOString(),
       contact: contact,
-      client_id: client.id
+      client_id: client.id,
+      service_name: serviceName
     }
 
     const { data: appointment, error: appointmentError } = await supabaseAdmin
       .from('appointments')
       .insert({
         service_id,
-        client_id: client.id, // Vínculo direto com a tabela de clientes
+        client_id: client.id,
         doctor_id: doctor_id || null,
         appointment_date,
         status: 'requested',
-        patient_id: patient_id || null, // ID de autenticação se houver
+        patient_id: patient_id || null,
         notes: notesPayload,
-        service: "Solicitação via Portal"
+        service: serviceName // Agora registra o nome real: "Consulta de Cardiologia", etc.
       })
       .select()
       .single()
@@ -79,7 +93,7 @@ serve(async (req) => {
       throw appointmentError;
     }
 
-    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), {
+    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id, service: serviceName }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
