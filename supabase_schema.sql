@@ -1,50 +1,68 @@
--- 1. Criar a tabela de perfis no esquema público
-CREATE TABLE public.profiles (
-  id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  full_name TEXT,
+-- Criar tabela de clientes
+CREATE TABLE public.clients (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  cpf TEXT UNIQUE NOT NULL,
   phone TEXT,
-  role TEXT DEFAULT 'patient' CHECK (role IN ('patient', 'doctor', 'assistant')),
-  avatar_url TEXT,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  PRIMARY KEY (id)
+  email TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Habilitar Row Level Security (RLS)
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- Criar tabela de agendamentos
+CREATE TABLE public.appointments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE,
+  service TEXT NOT NULL,
+  appointment_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  status TEXT DEFAULT 'scheduled',
+  notes JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- 3. Criar políticas de acesso
--- Usuários podem ver e editar seus próprios perfis
-CREATE POLICY "Usuários podem ver o próprio perfil" ON public.profiles
-  FOR SELECT TO authenticated USING (auth.uid() = id);
+-- Habilitar RLS para ambas as tabelas
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Usuários podem atualizar o próprio perfil" ON public.profiles
-  FOR UPDATE TO authenticated USING (auth.uid() = id);
+-- Políticas para clientes
+CREATE POLICY "Usuários podem ver seus próprios clientes" 
+ON public.clients FOR SELECT 
+TO authenticated 
+USING (true);
 
--- Médicos e auxiliares podem ver todos os perfis de pacientes
-CREATE POLICY "Staff pode ver todos os perfis" ON public.profiles
-  FOR SELECT TO authenticated USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.role IN ('doctor', 'assistant')
-    )
-  );
+CREATE POLICY "Usuários podem inserir clientes" 
+ON public.clients FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
 
--- 4. Função para criar perfil automaticamente no cadastro (Trigger)
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, full_name, role)
-  VALUES (
-    new.id, 
-    new.raw_user_meta_data ->> 'full_name', 
-    COALESCE(new.raw_user_meta_data ->> 'role', 'patient')
-  );
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+CREATE POLICY "Usuários podem atualizar clientes" 
+ON public.clients FOR UPDATE 
+TO authenticated 
+USING (true);
 
--- 5. Trigger para executar a função após o insert em auth.users
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+CREATE POLICY "Usuários podem deletar clientes" 
+ON public.clients FOR DELETE 
+TO authenticated 
+USING (true);
+
+-- Políticas para agendamentos
+CREATE POLICY "Usuários podem ver seus próprios agendamentos" 
+ON public.appointments FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Usuários podem inserir agendamentos" 
+ON public.appointments FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
+
+CREATE POLICY "Usuários podem atualizar agendamentos" 
+ON public.appointments FOR UPDATE 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Usuários podem deletar agendamentos" 
+ON public.appointments FOR DELETE 
+TO authenticated 
+USING (true);

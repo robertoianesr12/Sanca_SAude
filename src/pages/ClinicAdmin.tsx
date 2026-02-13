@@ -4,11 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, Calendar, Activity, LogOut, CheckCircle } from "lucide-react";
+import { Users, Calendar, Activity, LogOut, CheckCircle, User, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { showError, showSuccess } from "@/utils/toast";
 import CalendarBoard from "@/components/CalendarBoard";
+import { Link } from "react-router-dom";
 
 const ClinicAdmin = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -23,21 +25,17 @@ const ClinicAdmin = () => {
         navigate("/login");
         return;
       }
-
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single();
-
       if (profile?.role === 'patient') {
         navigate("/portal");
         return;
       }
-
       fetchData();
     };
-
     checkAdmin();
   }, [navigate]);
 
@@ -45,20 +43,13 @@ const ClinicAdmin = () => {
     setLoadingAppointments(true);
     const { data, error } = await supabase
       .from('appointments')
-      .select(`
-        *,
-        services (name),
-        profiles!appointments_patient_id_fkey (full_name, phone)
-      `)
+      .select(` *, services (name), profiles!appointments_patient_id_fkey (full_name, phone) `)
       .order('appointment_date', { ascending: true });
-
     setLoadingAppointments(false);
-
     if (error) {
       showError("Falha ao carregar agendamentos.");
       return;
     }
-
     setAppointments(data || []);
     setStats({
       total: data?.length || 0,
@@ -71,7 +62,6 @@ const ClinicAdmin = () => {
       .from('appointments')
       .update({ status: 'completed' })
       .eq('id', id);
-
     if (error) showError("Erro ao atualizar.");
     else {
       showSuccess("Atendimento concluído!");
@@ -84,11 +74,52 @@ const ClinicAdmin = () => {
       <div className="container">
         <div className="flex justify-between items-center mb-12">
           <h1 className="text-4xl font-extrabold text-slate-900 flex items-center gap-3">
-            <Activity className="h-8 w-8 text-blue-600" /> Painel Clínico
+            <Activity className="h-8 w-8 text-blue-600" />
+            Painel Clínico
           </h1>
           <Button variant="outline" onClick={() => supabase.auth.signOut().then(() => navigate("/"))}>
-            <LogOut className="mr-2 h-4 w-4" /> Sair
+            <LogOut className="mr-2 h-4 w-4" />
+            Sair
           </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <Link to="/clients">
+            <Card className="bg-white border-none shadow-md hover:shadow-xl transition-shadow cursor-pointer">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500 flex items-center">
+                  <User className="mr-2 h-4 w-4" />
+                  Clientes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-4xl font-bold text-slate-900">Gerenciar</div>
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Link to="/appointments">
+            <Card className="bg-white border-none shadow-md hover:shadow-xl transition-shadow cursor-pointer">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500 flex items-center">
+                  <Clock className="mr-2 h-4 w-4" />
+                  Agendamentos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-4xl font-bold text-slate-900">Gerenciar</div>
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Card className="bg-white border-none shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500">Pacientes Ativos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold text-slate-900">124</div>
+            </CardContent>
+          </Card>
         </div>
 
         <CalendarBoard appointments={appointments} onReschedule={fetchData} />
@@ -147,7 +178,8 @@ const ClinicAdmin = () => {
                 <TableCell className="text-right">
                   {app.status === 'scheduled' && (
                     <Button size="sm" variant="ghost" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => completeAppointment(app.id)}>
-                      <CheckCircle className="h-4 w-4 mr-1" /> Concluir
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Concluir
                     </Button>
                   )}
                 </TableCell>

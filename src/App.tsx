@@ -9,6 +9,8 @@ import ClinicAdmin from "./pages/ClinicAdmin";
 import Services from "./pages/Services";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import Clients from "./pages/Clients";
+import Appointments from "./pages/Appointments";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,8 @@ const App = () => (
           <Route path="/servicos" element={<Services />} />
           <Route path="/portal" element={<PatientPortal />} />
           <Route path="/admin" element={<ClinicAdmin />} />
+          <Route path="/clients" element={<Clients />} />
+          <Route path="/appointments" element={<Appointments />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
