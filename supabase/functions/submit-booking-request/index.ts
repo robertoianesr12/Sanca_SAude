@@ -6,140 +6,69 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-type BookingRequestBody = {
-  service_id: string
-  doctor_id?: string | null
-  appointment_date: string // ISO
-  requested_time?: string
-  contact: {
-    name: string
-    cpf: string
-    phone: string
-  }
-  source?: "auth" | "walk-in"
-  patient_id?: string | null
-}
-
-function stripNonDigits(v: string) {
-  return (v ?? "").replace(/\D/g, "")
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    })
-  }
-
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: req.headers.get("Authorization") ?? "",
-        },
-      },
-    })
+    // Usamos a SERVICE_ROLE_KEY para permitir que a função insira dados mesmo sem um usuário logado (walk-in)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-    const body = (await req.json()) as BookingRequestBody
+    const body = await req.json()
+    const { service_id, doctor_id, appointment_date, contact, source, patient_id } = body
 
-    const service_id = (body?.service_id ?? "").trim()
-    const doctor_id = (body?.doctor_id ?? null) || null
-    const appointment_date_raw = (body?.appointment_date ?? "").trim()
+    console.log("[submit-booking-request] Recebendo solicitação:", { service_id, contact });
 
-    const contactName = (body?.contact?.name ?? "").trim()
-    const cpfDigits = stripNonDigits(body?.contact?.cpf ?? "")
-    const phoneDigits = stripNonDigits(body?.contact?.phone ?? "")
-
-    if (!service_id) {
-      return new Response(JSON.stringify({ error: "service_id is required" }), {
+    if (!service_id || !contact?.name || !contact?.cpf || !contact?.phone) {
+      return new Response(JSON.stringify({ error: 'Dados obrigatórios ausentes' }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-
-    if (!contactName || cpfDigits.length !== 11 || phoneDigits.length < 10) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid contact data",
-          details: {
-            name: !!contactName,
-            cpfDigits: cpfDigits.length,
-            phoneDigits: phoneDigits.length,
-          },
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
-
-    const appointmentDate = new Date(appointment_date_raw)
-    if (Number.isNaN(appointmentDate.getTime())) {
-      return new Response(JSON.stringify({ error: "Invalid appointment_date" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    const { data: userData } = await supabase.auth.getUser()
-    const user = userData?.user ?? null
-
-    const source: "auth" | "walk-in" = user ? "auth" : (body?.source ?? "walk-in")
 
     const notesPayload = {
       schema: "booking_request_v1",
-      source,
+      source: source || "walk-in",
       requestedAt: new Date().toISOString(),
-      requestedTime: body?.requested_time ?? null,
-      contact: {
-        name: contactName,
-        cpf: cpfDigits,
-        phone: phoneDigits,
-      },
-      ai: {
-        status: "pending_contact",
-      },
-      meta: {
-        userAgent: req.headers.get("user-agent"),
-        timezone: "America/Sao_Paulo",
-      },
+      contact: contact,
+      ai: { status: "pending_contact" }
     }
 
-    const { data: inserted, error } = await supabase
-      .from("appointments")
+    // Inserção na tabela appointments
+    const { data, error } = await supabaseAdmin
+      .from('appointments')
       .insert({
         service_id,
-        doctor_id,
-        appointment_date: appointmentDate.toISOString(),
-        status: user ? "scheduled" : "requested",
-        patient_id: user?.id ?? body?.patient_id ?? null,
-        notes: JSON.stringify(notesPayload),
+        doctor_id: doctor_id || null,
+        appointment_date,
+        status: source === 'auth' ? 'scheduled' : 'requested',
+        patient_id: patient_id || null,
+        notes: notesPayload,
+        // Mantemos compatibilidade com a coluna 'service' se ela for obrigatória no schema
+        service: "Solicitação via Portal" 
       })
-      .select("id")
+      .select()
       .single()
 
     if (error) {
-      console.error("[submit-booking-request] insert error", { error })
-      return new Response(JSON.stringify({ error: "Database insert failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
+      console.error("[submit-booking-request] Erro no banco:", error);
+      throw error;
     }
 
-    return new Response(JSON.stringify({ ok: true, appointment_id: inserted?.id }), {
+    return new Response(JSON.stringify({ ok: true, data }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
+
   } catch (error) {
-    console.error("[submit-booking-request] unhandled error", { error })
-    return new Response(JSON.stringify({ error: "Unexpected error" }), {
+    console.error("[submit-booking-request] Erro crítico:", error)
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })
