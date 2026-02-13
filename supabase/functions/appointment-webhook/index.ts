@@ -17,33 +17,41 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { patient_email, service_id, appointment_date, notes } = await req.json()
+    const { patient_phone, patient_name, service_id, appointment_date, notes } = await req.json()
 
-    console.log("[appointment-webhook] Recebendo novo agendamento externo", { patient_email, service_id });
+    console.log("[appointment-webhook] Recebendo agendamento via IA", { patient_phone, patient_name });
 
-    // Buscar usuário pelo email
-    const { data: userData, error: userError } = await supabaseClient
-      .from('profiles')
-      .select('id')
-      .eq('email', patient_email)
-      .single()
-
-    if (userError || !userData) {
-      return new Response(JSON.stringify({ error: 'Paciente não encontrado' }), {
-        status: 404,
+    if (!patient_phone || patient_phone.length < 10) {
+      return new Response(JSON.stringify({ error: 'Telefone inválido ou ausente' }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Inserir agendamento
+    // 1. Upsert do Cliente pelo Telefone
+    const { data: client, error: clientError } = await supabaseClient
+      .from('clients')
+      .upsert({ 
+        phone: patient_phone.replace(/\D/g, ''),
+        name: patient_name,
+        updated_at: new Date().toISOString()
+      }, { 
+        onConflict: 'phone' 
+      })
+      .select()
+      .single()
+
+    if (clientError) throw clientError;
+
+    // 2. Inserir agendamento vinculado ao cliente
     const { data, error } = await supabaseClient
       .from('appointments')
       .insert({
-        patient_id: userData.id,
+        client_id: client.id,
         service_id,
         appointment_date,
-        notes,
-        status: 'scheduled'
+        notes: { ...notes, source: 'ia_webhook' },
+        status: 'scheduled' // Status definido como agendado (IA)
       })
       .select()
 

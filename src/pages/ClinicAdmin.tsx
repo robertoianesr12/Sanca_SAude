@@ -41,10 +41,16 @@ const ClinicAdmin = () => {
 
   const fetchData = async () => {
     setLoadingAppointments(true);
+    // Alterado para buscar de 'clients' em vez de 'profiles'
     const { data, error } = await supabase
       .from('appointments')
-      .select(` *, services (name), profiles!appointments_patient_id_fkey (full_name, phone) `)
+      .select(` 
+        *, 
+        services (name), 
+        clients (name, phone) 
+      `)
       .order('appointment_date', { ascending: true });
+    
     setLoadingAppointments(false);
     if (error) {
       showError("Falha ao carregar agendamentos.");
@@ -53,7 +59,7 @@ const ClinicAdmin = () => {
     setAppointments(data || []);
     setStats({
       total: data?.length || 0,
-      pending: data?.filter((a) => a.status === 'scheduled').length || 0
+      pending: data?.filter((a) => a.status === 'scheduled' || a.status === 'requested').length || 0
     });
   };
 
@@ -165,18 +171,18 @@ const ClinicAdmin = () => {
             {appointments.map((app) => (
               <TableRow key={app.id} className="hover:bg-slate-50 transition-colors">
                 <TableCell>
-                  <div className="font-bold">{app.profiles?.full_name}</div>
-                  <div className="text-xs text-slate-500">{app.profiles?.phone}</div>
+                  <div className="font-bold">{app.clients?.name || "N/A"}</div>
+                  <div className="text-xs text-slate-500">{app.clients?.phone}</div>
                 </TableCell>
-                <TableCell>{app.services?.name}</TableCell>
+                <TableCell>{app.services?.name || app.service}</TableCell>
                 <TableCell>{format(new Date(app.appointment_date), 'dd/MM/yyyy HH:mm')}</TableCell>
                 <TableCell>
-                  <Badge variant={app.status === 'scheduled' ? 'default' : 'outline'} className={app.status === 'scheduled' ? 'bg-blue-500 text-white' : ''}>
+                  <Badge variant={app.status === 'scheduled' || app.status === 'requested' ? 'default' : 'outline'} className={app.status === 'scheduled' ? 'bg-blue-500 text-white' : ''}>
                     {app.status}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  {app.status === 'scheduled' && (
+                  {(app.status === 'scheduled' || app.status === 'requested') && (
                     <Button size="sm" variant="ghost" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => completeAppointment(app.id)}>
                       <CheckCircle className="h-4 w-4 mr-1" />
                       Concluir

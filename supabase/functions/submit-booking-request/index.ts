@@ -20,59 +20,44 @@ serve(async (req) => {
     const body = await req.json()
     const { service_id, doctor_id, appointment_date, contact, source, patient_id } = body
 
-    console.log("[submit-booking-request] Iniciando processamento:", { service_id, cpf: contact?.cpf });
+    const phoneClean = contact?.phone?.replace(/\D/g, '');
 
-    if (!service_id || !contact?.cpf || !contact?.name) {
-      return new Response(JSON.stringify({ error: 'Dados do cliente ou serviço ausentes' }), {
+    console.log("[submit-booking-request] Processando via Portal", { phone: phoneClean });
+
+    if (!phoneClean || phoneClean.length < 10) {
+      return new Response(JSON.stringify({ error: 'Telefone (WhatsApp) é obrigatório para identificação.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // 1. Buscar o nome do serviço/especialidade
-    const { data: serviceData, error: serviceError } = await supabaseAdmin
+    // 1. Buscar o nome do serviço
+    const { data: serviceData } = await supabaseAdmin
       .from('services')
       .select('name')
       .eq('id', service_id)
       .single()
 
-    if (serviceError || !serviceData) {
-      console.error("[submit-booking-request] Erro ao buscar serviço:", serviceError);
-      throw new Error("Serviço não encontrado no sistema.");
-    }
+    const serviceName = serviceData?.name || "Consulta";
 
-    const serviceName = serviceData.name;
-
-    // 2. Gerenciar o Cadastro do Cliente (Validando pelo CPF)
+    // 2. Upsert do Cliente pelo Telefone (CPF é complementar)
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
       .upsert({ 
-        cpf: contact.cpf,
+        phone: phoneClean,
         name: contact.name,
-        phone: contact.phone,
+        cpf: contact.cpf || null, // CPF agora é opcional/complementar
         email: contact.email || null,
         updated_at: new Date().toISOString()
       }, { 
-        onConflict: 'cpf' 
+        onConflict: 'phone' 
       })
       .select()
       .single()
 
-    if (clientError) {
-      console.error("[submit-booking-request] Erro ao gerenciar cliente:", clientError);
-      throw new Error("Falha ao registrar dados do paciente.");
-    }
+    if (clientError) throw clientError;
 
-    // 3. Criar o Agendamento com o nome da especialidade
-    const notesPayload = {
-      schema: "booking_request_v3",
-      source: source || "web_portal",
-      requestedAt: new Date().toISOString(),
-      contact: contact,
-      client_id: client.id,
-      service_name: serviceName
-    }
-
+    // 3. Criar o Agendamento
     const { data: appointment, error: appointmentError } = await supabaseAdmin
       .from('appointments')
       .insert({
@@ -82,18 +67,15 @@ serve(async (req) => {
         appointment_date,
         status: 'requested',
         patient_id: patient_id || null,
-        notes: notesPayload,
-        service: serviceName // Agora registra o nome real: "Consulta de Cardiologia", etc.
+        service: serviceName,
+        notes: { source: source || "web_portal", contact }
       })
       .select()
       .single()
 
-    if (appointmentError) {
-      console.error("[submit-booking-request] Erro ao criar agendamento:", appointmentError);
-      throw appointmentError;
-    }
+    if (appointmentError) throw appointmentError;
 
-    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id, service: serviceName }), {
+    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
