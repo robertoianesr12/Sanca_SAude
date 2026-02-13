@@ -103,33 +103,34 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData?.user;
 
-    const { error } = await supabase.from("appointments").insert({
-      service_id: service?.id,
-      doctor_id: selectedDoctor || null,
-      appointment_date: appointmentDate.toISOString(),
-      status: user ? "scheduled" : "requested",
-      patient_id: user?.id ?? null,
-      notes: JSON.stringify({
-        source: user ? "auth" : "walk-in",
-        contact: {
-          name: contactName.trim(),
-          cpf: cpfDigits,
-          phone: phoneDigits,
+    const { data, error } = await supabase.functions.invoke(
+      "submit-booking-request",
+      {
+        body: {
+          service_id: service?.id,
+          doctor_id: selectedDoctor || null,
+          appointment_date: appointmentDate.toISOString(),
+          requested_time: selectedTime,
+          contact: {
+            name: contactName.trim(),
+            cpf: cpfDigits,
+            phone: phoneDigits,
+          },
+          source: user ? "auth" : "walk-in",
+          patient_id: user?.id ?? null,
         },
-        requestedAt: new Date().toISOString(),
-        requestedTime: selectedTime,
-      }),
-    });
+      }
+    );
 
     setLoading(false);
 
-    if (error) {
-      showError("Erro ao registrar a consulta.");
-      console.error("BookingModal", error);
+    if (error || !data?.ok) {
+      showError("Erro ao registrar a solicitação.");
+      console.error("BookingModal submit-booking-request", { error, data });
       return;
     }
 
-    showSuccess("Consulta registrada! Nossa equipe confirmará em breve.");
+    showSuccess("Solicitação enviada! Em breve entraremos em contato.");
     setContactName("");
     setContactCpf("");
     setContactPhone("");
@@ -156,9 +157,7 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent
-        className="w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] sm:max-w-[560px] max-h-[calc(100svh-1.5rem)] overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border border-border shadow-2xl p-4 sm:p-6"
-      >
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] sm:max-w-[560px] max-h-[calc(100svh-1.5rem)] overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border border-border shadow-2xl p-4 sm:p-6">
         <div className="max-h-[calc(100svh-1.5rem)] overflow-y-auto pr-1">
           <DialogHeader>
             <div className="flex items-start gap-3 mb-2">
