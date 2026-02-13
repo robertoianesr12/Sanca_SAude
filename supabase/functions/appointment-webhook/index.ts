@@ -7,66 +7,42 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
-    const supabaseClient = createClient(
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
     const { patient_phone, patient_name, service_id, appointment_date, notes } = await req.json()
+    const phoneClean = patient_phone?.replace(/\D/g, '');
 
-    console.log("[appointment-webhook] Recebendo agendamento via IA", { patient_phone, patient_name });
+    if (!phoneClean) throw new Error("Telefone ausente.");
 
-    if (!patient_phone || patient_phone.length < 10) {
-      return new Response(JSON.stringify({ error: 'Telefone inválido ou ausente' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 1. Upsert do Cliente pelo Telefone
-    const { data: client, error: clientError } = await supabaseClient
+    // 1. Upsert do Cliente
+    const { data: client } = await supabaseAdmin
       .from('clients')
-      .upsert({ 
-        phone: patient_phone.replace(/\D/g, ''),
-        name: patient_name,
-        updated_at: new Date().toISOString()
-      }, { 
-        onConflict: 'phone' 
-      })
-      .select()
-      .single()
+      .upsert({ phone: phoneClean, name: patient_name }, { onConflict: 'phone' })
+      .select().single()
 
-    if (clientError) throw clientError;
+    // 2. Agendamento Direto (IA)
+    const { data: serviceData } = await supabaseAdmin.from('services').select('name').eq('id', service_id).single()
 
-    // 2. Inserir agendamento vinculado ao cliente
-    const { data, error } = await supabaseClient
+    const { data } = await supabaseAdmin
       .from('appointments')
       .insert({
         client_id: client.id,
         service_id,
         appointment_date,
-        notes: { ...notes, source: 'ia_webhook' },
-        status: 'scheduled' // Status definido como agendado (IA)
+        status: 'scheduled',
+        service: serviceData?.name || "Consulta IA",
+        notes: { ...notes, source: 'ia_webhook' }
       })
       .select()
 
-    if (error) throw error
-
-    return new Response(JSON.stringify({ message: 'Agendamento criado com sucesso', data }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
+    return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: corsHeaders })
   } catch (error) {
-    console.error("[appointment-webhook] Erro ao processar webhook", error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
   }
 })

@@ -7,9 +7,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
     const supabaseAdmin = createClient(
@@ -17,48 +15,31 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const body = await req.json()
-    const { service_id, doctor_id, appointment_date, contact, source, patient_id } = body
-
+    const { service_id, doctor_id, appointment_date, contact, source, patient_id } = await req.json()
     const phoneClean = contact?.phone?.replace(/\D/g, '');
 
-    console.log("[submit-booking-request] Processando via Portal", { phone: phoneClean });
-
     if (!phoneClean || phoneClean.length < 10) {
-      return new Response(JSON.stringify({ error: 'Telefone (WhatsApp) é obrigatório para identificação.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      return new Response(JSON.stringify({ error: 'WhatsApp inválido.' }), { status: 400, headers: corsHeaders })
     }
 
-    // 1. Buscar o nome do serviço
-    const { data: serviceData } = await supabaseAdmin
-      .from('services')
-      .select('name')
-      .eq('id', service_id)
-      .single()
-
-    const serviceName = serviceData?.name || "Consulta";
-
-    // 2. Upsert do Cliente pelo Telefone (CPF é complementar)
+    // 1. Upsert do Cliente (Motor de Identidade Única)
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
       .upsert({ 
         phone: phoneClean,
         name: contact.name,
-        cpf: contact.cpf || null, // CPF agora é opcional/complementar
+        cpf: contact.cpf || null,
         email: contact.email || null,
         updated_at: new Date().toISOString()
-      }, { 
-        onConflict: 'phone' 
-      })
-      .select()
-      .single()
+      }, { onConflict: 'phone' })
+      .select().single()
 
     if (clientError) throw clientError;
 
-    // 3. Criar o Agendamento
-    const { data: appointment, error: appointmentError } = await supabaseAdmin
+    // 2. Registro do Agendamento
+    const { data: serviceData } = await supabaseAdmin.from('services').select('name').eq('id', service_id).single()
+    
+    const { data: appointment, error: appError } = await supabaseAdmin
       .from('appointments')
       .insert({
         service_id,
@@ -66,25 +47,15 @@ serve(async (req) => {
         doctor_id: doctor_id || null,
         appointment_date,
         status: 'requested',
-        patient_id: patient_id || null,
-        service: serviceName,
+        service: serviceData?.name || "Consulta",
         notes: { source: source || "web_portal", contact }
       })
-      .select()
-      .single()
+      .select().single()
 
-    if (appointmentError) throw appointmentError;
+    if (appError) throw appError;
 
-    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
+    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), { status: 200, headers: corsHeaders })
   } catch (error) {
-    console.error("[submit-booking-request] Erro crítico:", error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
