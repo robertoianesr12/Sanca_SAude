@@ -19,20 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableHead,
-  TableRow,
-} from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
-import { Loader2, Clock, Stethoscope } from "lucide-react";
+import { Loader2, Stethoscope, CalendarDays, User, Phone, CreditCard } from "lucide-react";
 import { format } from "date-fns";
-import { Badge } from "@/components/ui/badge";
+import { ptBR } from "date-fns/locale";
 
 interface BookingModalProps {
   service: any;
@@ -54,50 +46,36 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     const fetchQualifiedDoctors = async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, role")
+        .select("id, full_name")
         .eq("role", "doctor");
-
       setDoctors(data || []);
     };
 
-    if (isOpen) {
-      fetchQualifiedDoctors();
-    }
+    if (isOpen) fetchQualifiedDoctors();
   }, [isOpen]);
 
-  const formatPreviewDate = () => {
-    if (!selectedTime) return "Horário pendente";
-    return `${format(selectedDate, "dd/MM/yyyy")} às ${selectedTime}`;
-  };
-
   const handleBooking = async () => {
-    if (!contactName.trim() || !contactCpf.trim() || !contactPhone.trim()) {
-      showError("Preencha Nome, CPF e Telefone.");
+    const cpfDigits = stripNonDigits(contactCpf);
+    const phoneDigits = stripNonDigits(contactPhone);
+
+    if (!contactName.trim() || cpfDigits.length !== 11 || phoneDigits.length < 10) {
+      showError("Por favor, preencha todos os campos corretamente.");
       return;
     }
 
     if (!selectedTime) {
-      showError("Escolha um horário disponível.");
+      showError("Selecione um horário para o atendimento.");
       return;
     }
-
-    const cpfDigits = stripNonDigits(contactCpf);
-    const phoneDigits = stripNonDigits(contactPhone);
-
-    if (cpfDigits.length !== 11) {
-      showError("CPF inválido.");
-      return;
-    }
-
-    const [hours, minutes] = selectedTime.split(":").map(Number);
-    const appointmentDate = new Date(selectedDate);
-    appointmentDate.setHours(hours, minutes, 0, 0);
 
     setLoading(true);
 
     try {
+      const [hours, minutes] = selectedTime.split(":").map(Number);
+      const appointmentDate = new Date(selectedDate);
+      appointmentDate.setHours(hours, minutes, 0, 0);
+
       const { data: userData } = await supabase.auth.getUser();
-      const user = userData?.user;
 
       const { data, error } = await supabase.functions.invoke(
         "submit-booking-request",
@@ -111,153 +89,124 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
               cpf: cpfDigits,
               phone: phoneDigits,
             },
-            source: user ? "auth" : "walk-in",
-            patient_id: user?.id ?? null,
+            source: "web_portal",
+            patient_id: userData?.user?.id || null,
           },
         }
       );
 
       if (error) throw error;
 
-      showSuccess("Solicitação enviada! Em breve entraremos em contato.");
+      showSuccess("Solicitação enviada com sucesso! Entraremos em contato em breve.");
       onClose();
-      // Reset form
+      // Reset
       setContactName("");
       setContactCpf("");
       setContactPhone("");
       setSelectedTime("");
     } catch (err: any) {
-      console.error("Erro ao agendar:", err);
-      showError(err.message || "Erro ao registrar a solicitação.");
+      console.error("Erro no agendamento:", err);
+      showError("Não foi possível processar sua solicitação. Tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
-  const timeSlots = [
-    "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", 
-    "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00",
-  ];
+  const timeSlots = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-[560px] max-h-[90vh] overflow-y-auto rounded-[2rem] border border-border shadow-2xl p-6">
-        <DialogHeader>
-          <div className="flex items-start gap-3 mb-2">
-            <div className="shrink-0 rounded-2xl bg-blue-50 p-3">
-              <Stethoscope className="h-6 w-6 text-blue-600" />
+      <DialogContent className="sm:max-w-[500px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+        <div className="bg-blue-600 p-8 text-white">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+              <Stethoscope className="h-6 w-6" />
             </div>
             <div>
-              <DialogTitle className="text-2xl font-extrabold text-foreground">
-                Agendar {service?.name}
-              </DialogTitle>
-              <DialogDescription className="mt-1">
-                Preencha seus dados para solicitar um horário.
+              <DialogTitle className="text-2xl font-bold">Agendar Consulta</DialogTitle>
+              <DialogDescription className="text-blue-100">
+                {service?.name}
               </DialogDescription>
             </div>
           </div>
-        </DialogHeader>
+        </div>
 
-        <div className="space-y-6 py-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Nome Completo</label>
+        <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+          <div className="space-y-4">
+            <div className="relative">
+              <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
               <Input
-                placeholder="Maria Silva"
+                placeholder="Nome Completo"
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
-                className="rounded-xl h-12"
+                className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200 focus:ring-blue-500"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">CPF</label>
-              <Input
-                placeholder="000.000.000-00"
-                value={contactCpf}
-                onChange={(e) => setContactCpf(formatCpf(e.target.value))}
-                className="rounded-xl h-12"
-                maxLength={14}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="relative">
+                <CreditCard className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                <Input
+                  placeholder="CPF"
+                  value={contactCpf}
+                  onChange={(e) => setContactCpf(formatCpf(e.target.value))}
+                  className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200"
+                  maxLength={14}
+                />
+              </div>
+              <div className="relative">
+                <Phone className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                <Input
+                  placeholder="Telefone"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(formatPhone(e.target.value))}
+                  className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200"
+                  maxLength={15}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Telefone</label>
-              <Input
-                placeholder="(11) 98765-4321"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(formatPhone(e.target.value))}
-                className="rounded-xl h-12"
-                maxLength={16}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Especialista (opcional)</label>
-              <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-                <SelectTrigger className="rounded-xl h-12">
-                  <SelectValue placeholder="Selecione um profissional" />
-                </SelectTrigger>
-                <SelectContent>
-                  {doctors.map((doctor) => (
-                    <SelectItem key={doctor.id} value={doctor.id}>
-                      {doctor.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Data da Consulta</label>
-            <div className="border rounded-3xl p-2 bg-background flex justify-center">
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-blue-600" /> Selecione a Data
+            </label>
+            <div className="flex justify-center bg-slate-50 rounded-3xl p-2 border border-slate-100">
               <Calendar
                 mode="single"
                 selected={selectedDate}
                 onSelect={(date) => date && setSelectedDate(date)}
                 disabled={(date) => date < new Date()}
-                className="rounded-lg"
+                locale={ptBR}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Horários disponíveis</label>
-            <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-700">Horários Disponíveis</label>
+            <div className="grid grid-cols-4 gap-2">
               {timeSlots.map((slot) => (
                 <Button
                   key={slot}
-                  type="button"
                   variant={selectedTime === slot ? "default" : "outline"}
-                  className={`rounded-2xl text-sm h-10 ${
-                    selectedTime === slot ? "bg-blue-600 text-white" : ""
-                  }`}
                   onClick={() => setSelectedTime(slot)}
+                  className={`rounded-xl h-10 font-medium transition-all ${
+                    selectedTime === slot ? "bg-blue-600 shadow-md scale-105" : "hover:border-blue-300"
+                  }`}
                 >
                   {slot}
                 </Button>
               ))}
             </div>
           </div>
-
-          <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4">
-            <p className="text-sm font-semibold text-foreground mb-2">Resumo da Solicitação</p>
-            <div className="text-xs space-y-1 text-muted-foreground">
-              <p><span className="font-medium">Paciente:</span> {contactName || "—"}</p>
-              <p><span className="font-medium">Serviço:</span> {service?.name}</p>
-              <p><span className="font-medium">Data/Hora:</span> {formatPreviewDate()}</p>
-            </div>
-          </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="p-8 pt-0">
           <Button
             onClick={handleBooking}
             disabled={loading}
-            className="w-full rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg h-14 shadow-lg"
+            className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-blue-600 text-white font-bold text-lg transition-all shadow-lg"
           >
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Enviar Solicitação"}
+            {loading ? <Loader2 className="animate-spin mr-2" /> : "Confirmar Solicitação"}
           </Button>
         </DialogFooter>
       </DialogContent>
