@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
-import { Loader2, Stethoscope, CalendarDays, User, Phone, CreditCard, Fingerprint } from "lucide-react";
+import { Loader2, Stethoscope, CalendarDays, User, Phone, Fingerprint } from "lucide-react";
 import { ptBR } from "date-fns/locale";
 
 interface BookingModalProps {
@@ -35,11 +35,11 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   const [contactPhone, setContactPhone] = useState("");
 
   const handleBooking = async () => {
-    const cpfDigits = stripNonDigits(contactCpf);
     const phoneDigits = stripNonDigits(contactPhone);
+    const cpfDigits = stripNonDigits(contactCpf);
 
-    if (!contactName.trim() || phoneDigits.length < 10 || cpfDigits.length < 11) {
-      showError("Por favor, preencha Nome, CPF e WhatsApp corretamente.");
+    if (!contactName.trim() || phoneDigits.length < 10) {
+      showError("Por favor, preencha Nome e WhatsApp corretamente.");
       return;
     }
 
@@ -51,51 +51,42 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     setLoading(true);
 
     try {
-      // 1. Criar ou atualizar o cliente
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .upsert({
-          name: contactName.trim(),
-          cpf: cpfDigits,
-          phone: phoneDigits,
-        }, { onConflict: 'cpf' })
-        .select()
-        .single();
-
-      if (clientError) throw clientError;
-
-      // 2. Preparar a data do agendamento
       const [hours, minutes] = selectedTime.split(":").map(Number);
       const appointmentDate = new Date(selectedDate);
       appointmentDate.setHours(hours, minutes, 0, 0);
 
-      // 3. Criar o agendamento
-      const { data: appointmentData, error: appointmentError } = await supabase
-        .from('appointments')
-        .insert({
-          client_id: clientData.id,
+      const response = await fetch("https://zwoqzptpoekzwracicbm.supabase.co/functions/v1/submit-booking-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabase.auth.getSession()}`
+        },
+        body: JSON.stringify({
           service_id: service?.id,
-          service: service?.name,
           appointment_date: appointmentDate.toISOString(),
-          status: 'requested',
-          notes: { source: 'web_portal' }
+          contact: {
+            name: contactName.trim(),
+            phone: phoneDigits,
+            cpf: cpfDigits || null
+          },
+          source: "web_portal"
         })
-        .select()
-        .single();
+      });
 
-      if (appointmentError) throw appointmentError;
+      const result = await response.json();
 
-      showSuccess("Solicitação iniciada! Redirecionando para o checkout...");
+      if (!response.ok) throw new Error(result.error || "Erro ao processar agendamento.");
+
+      showSuccess("Solicitação enviada! Redirecionando para o checkout...");
       
-      // Redireciona para o checkout com o ID do agendamento
       setTimeout(() => {
         onClose();
-        navigate(`/checkout?appointment_id=${appointmentData.id}`);
+        navigate(`/checkout?appointment_id=${result.appointmentId}`);
       }, 1500);
 
     } catch (err: any) {
       console.error("Erro no agendamento:", err);
-      showError("Erro ao processar solicitação. Tente novamente.");
+      showError(err.message || "Erro ao processar solicitação.");
     } finally {
       setLoading(false);
     }
@@ -134,7 +125,7 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
             <div className="relative">
               <Fingerprint className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
               <Input
-                placeholder="CPF"
+                placeholder="CPF (Opcional)"
                 value={contactCpf}
                 onChange={(e) => setContactCpf(formatCpf(e.target.value))}
                 className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200"

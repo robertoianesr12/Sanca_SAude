@@ -15,12 +15,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { service_id, doctor_id, appointment_date, contact, source, patient_id } = await req.json()
+    const { service_id, doctor_id, appointment_date, contact, source } = await req.json()
     const phoneClean = contact?.phone?.replace(/\D/g, '');
 
     if (!phoneClean || phoneClean.length < 10) {
       return new Response(JSON.stringify({ error: 'WhatsApp inválido.' }), { status: 400, headers: corsHeaders })
     }
+
+    console.log(`[submit-booking-request] Processando agendamento para: ${phoneClean}`);
 
     // 1. Upsert do Cliente (Identificação Única por Telefone)
     const { data: client, error: clientError } = await supabaseAdmin
@@ -36,7 +38,7 @@ serve(async (req) => {
 
     if (clientError) throw clientError;
 
-    // 2. Registro do Agendamento (Status 'requested' para triagem humana)
+    // 2. Registro do Agendamento
     const { data: serviceData } = await supabaseAdmin.from('services').select('name').eq('id', service_id).single()
     
     const { data: appointment, error: appError } = await supabaseAdmin
