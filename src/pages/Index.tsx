@@ -1,63 +1,53 @@
 import React from "react";
-import Layout from "@/components/Layout";
+import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
-import MenuHighlight from "@/components/MenuHighlight";
-import SpecialOffers from "@/components/SpecialOffers";
-import TestimonialsCarousel from "@/components/TestimonialsCarousel";
-import { MadeWithDyad } from "@/components/made-with-dyad";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
-import { Utensils } from "lucide-react";
+import { Heart, Shield, Clock, Activity } from "lucide-react";
 
-const Index = () => {
+const ClinicIndex = () => {
   return (
-    <Layout>
+    <div className="min-h-screen bg-white">
+      <Header />
       <HeroSection />
-      
-      {/* CTA Section after Hero */}
-      <section className="py-12 bg-secondary">
-        <div className="container text-center">
-          <h2 className="text-3xl font-bold text-foreground mb-4">
-            Pronto para a melhor experiência gastronômica?
-          </h2>
-          <p className="text-lg text-muted-foreground mb-6">
-            Seja para jantar no nosso ambiente acolhedor ou pedir em casa, o TremBão está pronto para te servir.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button asChild size="lg" className="bg-primary hover:bg-primary/90 text-white text-lg font-semibold rounded-xl shadow-lg">
-              <Link to="/order">Reservar Mesa</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="border-primary text-primary hover:bg-primary/10 text-lg font-semibold rounded-xl">
-              <Link to="/menu">Ver Cardápio</Link>
-            </Button>
+
+      {/* Features Section */}
+      <section className="py-32 bg-slate-50">
+        <div className="container">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            {[
+              { icon: Heart, title: "Cuidado Humanizado", desc: "Nossa equipe é treinada para oferecer acolhimento e empatia em cada consulta." },
+              { icon: Shield, title: "Segurança de Dados", desc: "Seus registros médicos são protegidos com criptografia de nível bancário." },
+              { icon: Clock, title: "Sem Filas", desc: "Sistema de agendamento inteligente que respeita rigorosamente seu horário." }
+            ].map((feature, i) => (
+              <div key={i} className="glass-card p-12 rounded-[3rem] hover:scale-105 transition-all duration-500 group">
+                <div className="bg-primary/10 w-20 h-20 rounded-3xl flex items-center justify-center mb-8 group-hover:bg-primary transition-colors">
+                  <feature.icon className="h-10 w-10 text-primary group-hover:text-white transition-colors" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-4 tracking-tighter">{feature.title}</h3>
+                <p className="text-slate-500 leading-relaxed text-lg">{feature.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <MenuHighlight />
-      <SpecialOffers />
-      <TestimonialsCarousel />
-      
-      {/* Final CTA */}
-      <section className="py-16 bg-card">
-        <div className="container text-center">
-          <Utensils className="h-10 w-10 mx-auto text-primary mb-4" />
-          <h2 className="text-4xl font-bold text-foreground mb-4">
-            Experimente o nosso melhor hambúrguer!
-          </h2>
-          <p className="text-xl text-muted-foreground mb-8">
-            Não perca tempo, faça seu pedido ou reserve sua mesa agora mesmo.
-          </p>
-          <Button asChild size="xl" className="bg-primary hover:bg-primary/90 text-white text-xl font-extrabold rounded-2xl shadow-2xl transition-transform duration-300 hover:scale-[1.05] px-10 py-7">
-            <Link to="/order">
-              PEÇA AGORA!
-            </Link>
-          </Button>
+      {/* Stats Section */}
+      <section className="py-24 bg-primary">
+        <div className="container grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
+          {[
+            { label: "Pacientes", val: "15k+" },
+            { label: "Especialistas", val: "45" },
+            { label: "Anos de Exp", val: "12" },
+            { label: "Satisfação", val: "99%" }
+          ].map((stat, i) => (
+            <div key={i} className="space-y-2">
+              <div className="text-5xl font-black text-white tracking-tighter">{stat.val}</div>
+              <div className="text-blue-100 font-bold uppercase tracking-widest text-xs">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </section>
-      
-    </Layout>
+    </div>
   );
 };
 
-export default Index;
+export default ClinicIndex;
