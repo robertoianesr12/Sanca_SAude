@@ -11,19 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
 import { Loader2, Stethoscope, CalendarDays, User, Phone, CreditCard } from "lucide-react";
-import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface BookingModalProps {
@@ -33,8 +25,6 @@ interface BookingModalProps {
 }
 
 const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
-  const [doctors, setDoctors] = useState<any[]>([]);
-  const [selectedDoctor, setSelectedDoctor] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -42,29 +32,17 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   const [contactCpf, setContactCpf] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
-  useEffect(() => {
-    const fetchQualifiedDoctors = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("role", "doctor");
-      setDoctors(data || []);
-    };
-
-    if (isOpen) fetchQualifiedDoctors();
-  }, [isOpen]);
-
   const handleBooking = async () => {
     const cpfDigits = stripNonDigits(contactCpf);
     const phoneDigits = stripNonDigits(contactPhone);
 
-    if (!contactName.trim() || cpfDigits.length !== 11 || phoneDigits.length < 10) {
-      showError("Por favor, preencha todos os campos corretamente.");
+    if (!contactName.trim() || phoneDigits.length < 10) {
+      showError("Por favor, preencha seu nome e WhatsApp.");
       return;
     }
 
     if (!selectedTime) {
-      showError("Selecione um horário para o atendimento.");
+      showError("Selecione um horário.");
       return;
     }
 
@@ -75,14 +53,11 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
       const appointmentDate = new Date(selectedDate);
       appointmentDate.setHours(hours, minutes, 0, 0);
 
-      const { data: userData } = await supabase.auth.getUser();
-
       const { data, error } = await supabase.functions.invoke(
         "submit-booking-request",
         {
           body: {
             service_id: service?.id,
-            doctor_id: selectedDoctor || null,
             appointment_date: appointmentDate.toISOString(),
             contact: {
               name: contactName.trim(),
@@ -90,23 +65,19 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
               phone: phoneDigits,
             },
             source: "web_portal",
-            patient_id: userData?.user?.id || null,
           },
         }
       );
 
       if (error) throw error;
 
-      showSuccess("Solicitação enviada com sucesso! Entraremos em contato em breve.");
+      showSuccess("Solicitação enviada! Entraremos em contato via WhatsApp.");
       onClose();
-      // Reset
       setContactName("");
-      setContactCpf("");
       setContactPhone("");
       setSelectedTime("");
     } catch (err: any) {
-      console.error("Erro no agendamento:", err);
-      showError("Não foi possível processar sua solicitação. Tente novamente.");
+      showError("Erro ao processar solicitação.");
     } finally {
       setLoading(false);
     }
@@ -116,9 +87,9 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
-        <div className="bg-blue-600 p-8 text-white">
-          <div className="flex items-center gap-4 mb-4">
+      <DialogContent className="sm:max-w-[500px] glass-card rounded-[2.5rem] p-0 overflow-hidden border-none">
+        <div className="bg-primary p-8 text-white">
+          <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
               <Stethoscope className="h-6 w-6" />
             </div>
@@ -139,36 +110,24 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
                 placeholder="Nome Completo"
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
-                className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200 focus:ring-blue-500"
+                className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200 focus:ring-primary"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="relative">
-                <CreditCard className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
-                <Input
-                  placeholder="CPF"
-                  value={contactCpf}
-                  onChange={(e) => setContactCpf(formatCpf(e.target.value))}
-                  className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200"
-                  maxLength={14}
-                />
-              </div>
-              <div className="relative">
-                <Phone className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
-                <Input
-                  placeholder="Telefone"
-                  value={contactPhone}
-                  onChange={(e) => setContactPhone(formatPhone(e.target.value))}
-                  className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200"
-                  maxLength={15}
-                />
-              </div>
+            <div className="relative">
+              <Phone className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+              <Input
+                placeholder="WhatsApp"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(formatPhone(e.target.value))}
+                className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200"
+                maxLength={15}
+              />
             </div>
           </div>
 
           <div className="space-y-3">
             <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-blue-600" /> Selecione a Data
+              <CalendarDays className="h-4 w-4 text-primary" /> Selecione a Data
             </label>
             <div className="flex justify-center bg-slate-50 rounded-3xl p-2 border border-slate-100">
               <Calendar
@@ -190,7 +149,7 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
                   variant={selectedTime === slot ? "default" : "outline"}
                   onClick={() => setSelectedTime(slot)}
                   className={`rounded-xl h-10 font-medium transition-all ${
-                    selectedTime === slot ? "bg-blue-600 shadow-md scale-105" : "hover:border-blue-300"
+                    selectedTime === slot ? "bg-primary shadow-md scale-105" : "hover:border-primary/30"
                   }`}
                 >
                   {slot}
@@ -204,9 +163,9 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
           <Button
             onClick={handleBooking}
             disabled={loading}
-            className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-blue-600 text-white font-bold text-lg transition-all shadow-lg"
+            className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-primary text-white font-bold text-lg btn-apple"
           >
-            {loading ? <Loader2 className="animate-spin mr-2" /> : "Confirmar Solicitação"}
+            {loading ? <Loader2 className="animate-spin mr-2" /> : "Confirmar Agendamento"}
           </Button>
         </DialogFooter>
       </DialogContent>
