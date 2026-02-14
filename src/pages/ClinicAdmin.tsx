@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Activity, CheckCircle, TrendingUp, Zap, DollarSign, LogOut } from "lucide-react";
+import { Activity, CheckCircle, TrendingUp, Zap, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { showError, showSuccess } from "@/utils/toast";
@@ -81,7 +81,7 @@ const ClinicAdmin = () => {
           <Card className="glass-card border-none">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-emerald-500" /> Faturamento Previsto
+                <span className="text-emerald-500 font-bold">R$</span> Faturamento Previsto
               </CardTitle>
             </CardHeader>
             <CardContent>

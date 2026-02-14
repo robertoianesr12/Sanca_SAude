@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, DollarSign, ArrowRight, Sparkles } from "lucide-react";
+import { Clock, ArrowRight, Sparkles } from "lucide-react";
 import BookingModal from "@/components/BookingModal";
 import { Link } from "react-router-dom";
 
@@ -62,7 +62,7 @@ const Services = () => {
               <CardContent className="px-8 pb-4">
                 <div className="flex items-center justify-between text-slate-900 font-bold text-xl">
                   <div className="flex items-center gap-1">
-                    <DollarSign className="h-5 w-5 text-blue-600" />
+                    <span className="text-blue-600 font-bold">R$</span>
                     {service.price?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
