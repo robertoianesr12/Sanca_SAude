@@ -4,73 +4,63 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, Calendar, Activity, LogOut, CheckCircle, User, Clock } from "lucide-react";
+import { Activity, CheckCircle, TrendingUp, Zap, DollarSign, LogOut } from "lucide-react";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { showError, showSuccess } from "@/utils/toast";
-import CalendarBoard from "@/components/CalendarBoard";
-import { Link } from "react-router-dom";
 
 const ClinicAdmin = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [stats, setStats] = useState({ total: 0, pending: 0 });
-  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [metrics, setMetrics] = useState({
+    faturamentoPrevisto: 0,
+    conversaoIA: 0,
+    receitaRecuperada: 0
+  });
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/login");
-        return;
-      }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      if (profile?.role === 'patient') {
-        navigate("/portal");
-        return;
-      }
-      fetchData();
-    };
-    checkAdmin();
-  }, [navigate]);
+    fetchData();
+  }, []);
 
   const fetchData = async () => {
-    setLoadingAppointments(true);
-    // Alterado para buscar de 'clients' em vez de 'profiles'
+    setLoading(true);
     const { data, error } = await supabase
       .from('appointments')
-      .select(` 
-        *, 
-        services (name), 
-        clients (name, phone) 
-      `)
+      .select('*, services(name, price), clients(name, phone)')
       .order('appointment_date', { ascending: true });
-    
-    setLoadingAppointments(false);
+
     if (error) {
-      showError("Falha ao carregar agendamentos.");
-      return;
+      showError("Erro ao carregar dados.");
+    } else {
+      setAppointments(data || []);
+      calculateMetrics(data || []);
     }
-    setAppointments(data || []);
-    setStats({
-      total: data?.length || 0,
-      pending: data?.filter((a) => a.status === 'scheduled' || a.status === 'requested').length || 0
+    setLoading(false);
+  };
+
+  const calculateMetrics = (data: any[]) => {
+    const totalRevenue = data.reduce((acc, curr) => acc + (curr.services?.price || 0), 0);
+    const iaAppointments = data.filter(a => a.notes?.source === 'ia_webhook');
+    const iaRevenue = iaAppointments.reduce((acc, curr) => acc + (curr.services?.price || 0), 0);
+    const conversionRate = data.length > 0 ? (iaAppointments.length / data.length) * 100 : 0;
+
+    setMetrics({
+      faturamentoPrevisto: totalRevenue,
+      conversaoIA: Math.round(conversionRate),
+      receitaRecuperada: iaRevenue
     });
   };
 
-  const completeAppointment = async (id: string) => {
+  const confirmAppointment = async (id: string) => {
     const { error } = await supabase
       .from('appointments')
-      .update({ status: 'completed' })
+      .update({ status: 'confirmed' })
       .eq('id', id);
-    if (error) showError("Erro ao atualizar.");
+
+    if (error) showError("Erro ao confirmar.");
     else {
-      showSuccess("Atendimento concluído!");
+      showSuccess("Agendamento confirmado!");
       fetchData();
     }
   };
@@ -79,119 +69,88 @@ const ClinicAdmin = () => {
     <div className="min-h-screen bg-slate-50 py-12">
       <div className="container">
         <div className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-extrabold text-slate-900 flex items-center gap-3">
-            <Activity className="h-8 w-8 text-blue-600" />
-            Painel Clínico
+          <h1 className="text-4xl font-black text-slate-900 flex items-center gap-3">
+            <Activity className="h-8 w-8 text-primary" /> Painel de Gestão
           </h1>
-          <Button variant="outline" onClick={() => supabase.auth.signOut().then(() => navigate("/"))}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sair
+          <Button variant="outline" onClick={() => navigate("/")} className="rounded-xl">
+            <LogOut className="mr-2 h-4 w-4" /> Sair
           </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <Link to="/clients">
-            <Card className="bg-white border-none shadow-md hover:shadow-xl transition-shadow cursor-pointer">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500 flex items-center">
-                  <User className="mr-2 h-4 w-4" />
-                  Clientes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-4xl font-bold text-slate-900">Gerenciar</div>
-              </CardContent>
-            </Card>
-          </Link>
-          
-          <Link to="/appointments">
-            <Card className="bg-white border-none shadow-md hover:shadow-xl transition-shadow cursor-pointer">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500 flex items-center">
-                  <Clock className="mr-2 h-4 w-4" />
-                  Agendamentos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-4xl font-bold text-slate-900">Gerenciar</div>
-              </CardContent>
-            </Card>
-          </Link>
-          
-          <Card className="bg-white border-none shadow-md">
+          <Card className="glass-card border-none">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Pacientes Ativos</CardTitle>
+              <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-emerald-500" /> Faturamento Previsto
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold text-slate-900">124</div>
+              <div className="text-3xl font-black text-slate-900">R$ {metrics.faturamentoPrevisto.toLocaleString()}</div>
+              <p className="text-xs text-slate-400 mt-1">Baseado em agendamentos ativos</p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-500" /> Conversão IA
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-slate-900">{metrics.conversaoIA}%</div>
+              <p className="text-xs text-slate-400 mt-1">Agendamentos via WhatsApp</p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-none bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-primary flex items-center gap-2">
+                <Zap className="h-4 w-4" /> Receita Recuperada
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-primary">R$ {metrics.receitaRecuperada.toLocaleString()}</div>
+              <p className="text-xs text-primary/60 mt-1">Capturado fora do horário comercial</p>
             </CardContent>
           </Card>
         </div>
 
-        <CalendarBoard appointments={appointments} onReschedule={fetchData} />
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 mt-10">
-          <Card className="bg-blue-600 text-white border-none shadow-xl">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-80">Total de Agendamentos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-none shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Pendentes Hoje</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-blue-600">{stats.pending}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-none shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Pacientes Ativos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-slate-900">124</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-none shadow-xl overflow-hidden">
-          <TableHeader className="bg-slate-100">
-            <TableRow>
-              <TableHead className="font-bold">Paciente</TableHead>
-              <TableHead className="font-bold">Serviço</TableHead>
-              <TableHead className="font-bold">Data/Hora</TableHead>
-              <TableHead className="font-bold">Status</TableHead>
-              <TableHead className="text-right font-bold">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {appointments.map((app) => (
-              <TableRow key={app.id} className="hover:bg-slate-50 transition-colors">
-                <TableCell>
-                  <div className="font-bold">{app.clients?.name || "N/A"}</div>
-                  <div className="text-xs text-slate-500">{app.clients?.phone}</div>
-                </TableCell>
-                <TableCell>{app.services?.name || app.service}</TableCell>
-                <TableCell>{format(new Date(app.appointment_date), 'dd/MM/yyyy HH:mm')}</TableCell>
-                <TableCell>
-                  <Badge variant={app.status === 'scheduled' || app.status === 'requested' ? 'default' : 'outline'} className={app.status === 'scheduled' ? 'bg-blue-500 text-white' : ''}>
-                    {app.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {(app.status === 'scheduled' || app.status === 'requested') && (
-                    <Button size="sm" variant="ghost" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => completeAppointment(app.id)}>
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Concluir
-                    </Button>
-                  )}
-                </TableCell>
+        <Card className="glass-card border-none overflow-hidden">
+          <Table>
+            <TableHeader className="bg-slate-100/50">
+              <TableRow>
+                <TableHead className="font-bold">Paciente</TableHead>
+                <TableHead className="font-bold">Serviço</TableHead>
+                <TableHead className="font-bold">Data</TableHead>
+                <TableHead className="font-bold">Status</TableHead>
+                <TableHead className="text-right font-bold">Ações</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
+            </TableHeader>
+            <TableBody>
+              {appointments.map((app) => (
+                <TableRow key={app.id} className="hover:bg-white/50 transition-colors">
+                  <TableCell>
+                    <div className="font-bold text-slate-900">{app.clients?.name}</div>
+                    <div className="text-xs text-slate-500">{app.clients?.phone}</div>
+                  </TableCell>
+                  <TableCell className="font-medium">{app.services?.name || app.service}</TableCell>
+                  <TableCell>{format(new Date(app.appointment_date), 'dd/MM/yyyy HH:mm')}</TableCell>
+                  <TableCell>
+                    <Badge variant={app.status === 'confirmed' ? 'default' : 'outline'} className={app.status === 'confirmed' ? 'bg-emerald-500' : ''}>
+                      {app.status === 'requested' ? 'Pendente' : app.status === 'scheduled' ? 'Agendado' : 'Confirmado'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {app.status !== 'confirmed' && (
+                      <Button size="sm" onClick={() => confirmAppointment(app.id)} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
+                        <CheckCircle className="h-4 w-4 mr-1" /> Confirmar
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </Card>
       </div>
     </div>
