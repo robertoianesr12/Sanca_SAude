@@ -22,7 +22,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'WhatsApp inválido.' }), { status: 400, headers: corsHeaders })
     }
 
-    // 1. Upsert do Cliente (Motor de Identidade Única)
+    // 1. Upsert do Cliente (Identificação Única por Telefone)
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
       .upsert({ 
@@ -36,7 +36,7 @@ serve(async (req) => {
 
     if (clientError) throw clientError;
 
-    // 2. Registro do Agendamento
+    // 2. Registro do Agendamento (Status 'requested' para triagem humana)
     const { data: serviceData } = await supabaseAdmin.from('services').select('name').eq('id', service_id).single()
     
     const { data: appointment, error: appError } = await supabaseAdmin
@@ -56,6 +56,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), { status: 200, headers: corsHeaders })
   } catch (error) {
+    console.error("[submit-booking-request] Erro:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })

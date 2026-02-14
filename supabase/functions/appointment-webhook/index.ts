@@ -18,18 +18,29 @@ serve(async (req) => {
     const { patient_phone, patient_name, service_id, appointment_date, notes } = await req.json()
     const phoneClean = patient_phone?.replace(/\D/g, '');
 
-    if (!phoneClean) throw new Error("Telefone ausente.");
+    if (!phoneClean) {
+      return new Response(JSON.stringify({ error: "Telefone é obrigatório." }), { status: 400, headers: corsHeaders })
+    }
 
-    // 1. Upsert do Cliente
-    const { data: client } = await supabaseAdmin
+    console.log(`[appointment-webhook] Processando agendamento para: ${phoneClean}`);
+
+    // 1. Upsert do Cliente usando o Telefone como chave única
+    const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
-      .upsert({ phone: phoneClean, name: patient_name }, { onConflict: 'phone' })
+      .upsert({ 
+        phone: phoneClean, 
+        name: patient_name,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'phone' })
       .select().single()
 
-    // 2. Agendamento Direto (IA)
+    if (clientError) throw clientError;
+
+    // 2. Busca o nome do serviço para histórico
     const { data: serviceData } = await supabaseAdmin.from('services').select('name').eq('id', service_id).single()
 
-    const { data } = await supabaseAdmin
+    // 3. Cria o agendamento com status 'scheduled' (Confirmado pela IA)
+    const { data: appointment, error: appError } = await supabaseAdmin
       .from('appointments')
       .insert({
         client_id: client.id,
@@ -39,10 +50,13 @@ serve(async (req) => {
         service: serviceData?.name || "Consulta IA",
         notes: { ...notes, source: 'ia_webhook' }
       })
-      .select()
+      .select().single()
 
-    return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: corsHeaders })
+    if (appError) throw appError;
+
+    return new Response(JSON.stringify({ ok: true, appointmentId: appointment.id }), { status: 200, headers: corsHeaders })
   } catch (error) {
+    console.error("[appointment-webhook] Erro:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
   }
 })
