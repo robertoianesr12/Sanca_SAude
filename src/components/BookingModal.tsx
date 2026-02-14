@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
-import { Loader2, Stethoscope, CalendarDays, User, Phone, CreditCard } from "lucide-react";
+import { Loader2, Stethoscope, CalendarDays, User, Phone, CreditCard, Fingerprint } from "lucide-react";
 import { ptBR } from "date-fns/locale";
 
 interface BookingModalProps {
@@ -25,6 +26,7 @@ interface BookingModalProps {
 }
 
 const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -36,8 +38,8 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     const cpfDigits = stripNonDigits(contactCpf);
     const phoneDigits = stripNonDigits(contactPhone);
 
-    if (!contactName.trim() || phoneDigits.length < 10) {
-      showError("Por favor, preencha seu nome e WhatsApp.");
+    if (!contactName.trim() || phoneDigits.length < 10 || cpfDigits.length < 11) {
+      showError("Por favor, preencha Nome, CPF e WhatsApp corretamente.");
       return;
     }
 
@@ -49,35 +51,51 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
     setLoading(true);
 
     try {
+      // 1. Criar ou atualizar o cliente
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .upsert({
+          name: contactName.trim(),
+          cpf: cpfDigits,
+          phone: phoneDigits,
+        }, { onConflict: 'cpf' })
+        .select()
+        .single();
+
+      if (clientError) throw clientError;
+
+      // 2. Preparar a data do agendamento
       const [hours, minutes] = selectedTime.split(":").map(Number);
       const appointmentDate = new Date(selectedDate);
       appointmentDate.setHours(hours, minutes, 0, 0);
 
-      const { data, error } = await supabase.functions.invoke(
-        "submit-booking-request",
-        {
-          body: {
-            service_id: service?.id,
-            appointment_date: appointmentDate.toISOString(),
-            contact: {
-              name: contactName.trim(),
-              cpf: cpfDigits,
-              phone: phoneDigits,
-            },
-            source: "web_portal",
-          },
-        }
-      );
+      // 3. Criar o agendamento
+      const { data: appointmentData, error: appointmentError } = await supabase
+        .from('appointments')
+        .insert({
+          client_id: clientData.id,
+          service_id: service?.id,
+          service: service?.name,
+          appointment_date: appointmentDate.toISOString(),
+          status: 'requested',
+          notes: { source: 'web_portal' }
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (appointmentError) throw appointmentError;
 
-      showSuccess("Solicitação enviada! Entraremos em contato via WhatsApp.");
-      onClose();
-      setContactName("");
-      setContactPhone("");
-      setSelectedTime("");
+      showSuccess("Solicitação iniciada! Redirecionando para o checkout...");
+      
+      // Redireciona para o checkout com o ID do agendamento
+      setTimeout(() => {
+        onClose();
+        navigate(`/checkout?appointment_id=${appointmentData.id}`);
+      }, 1500);
+
     } catch (err: any) {
-      showError("Erro ao processar solicitação.");
+      console.error("Erro no agendamento:", err);
+      showError("Erro ao processar solicitação. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -111,6 +129,16 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
                 className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200 focus:ring-primary"
+              />
+            </div>
+            <div className="relative">
+              <Fingerprint className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+              <Input
+                placeholder="CPF"
+                value={contactCpf}
+                onChange={(e) => setContactCpf(formatCpf(e.target.value))}
+                className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200"
+                maxLength={14}
               />
             </div>
             <div className="relative">
