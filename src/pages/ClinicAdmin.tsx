@@ -4,13 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Activity, CheckCircle, TrendingUp, Zap, LogOut, Calendar, Settings, Globe } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Activity, CheckCircle, TrendingUp, Zap, LogOut, Calendar, Settings, Globe, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { showError, showSuccess } from "@/utils/toast";
 
 const ClinicAdmin = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [insurances, setInsurances] = useState<any[]>([]);
+  const [newInsurance, setNewInsurance] = useState("");
   const [isCalendarEnabled, setIsCalendarEnabled] = useState(false);
   const [metrics, setMetrics] = useState({
     faturamentoPrevisto: 0,
@@ -22,6 +26,7 @@ const ClinicAdmin = () => {
 
   useEffect(() => {
     fetchData();
+    fetchInsurances();
   }, []);
 
   const fetchData = async () => {
@@ -31,13 +36,37 @@ const ClinicAdmin = () => {
       .select('*, services(name, price), clients(name, phone)')
       .order('appointment_date', { ascending: true });
 
-    if (error) {
-      showError("Erro ao carregar dados.");
-    } else {
+    if (error) showError("Erro ao carregar dados.");
+    else {
       setAppointments(data || []);
       calculateMetrics(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchInsurances = async () => {
+    const { data } = await supabase.from('insurances').select('*').order('name');
+    setInsurances(data || []);
+  };
+
+  const handleAddInsurance = async () => {
+    if (!newInsurance.trim()) return;
+    const { error } = await supabase.from('insurances').insert({ name: newInsurance.trim() });
+    if (error) showError("Erro ao adicionar convênio.");
+    else {
+      showSuccess("Convênio adicionado!");
+      setNewInsurance("");
+      fetchInsurances();
+    }
+  };
+
+  const handleDeleteInsurance = async (id: string) => {
+    const { error } = await supabase.from('insurances').delete().eq('id', id);
+    if (error) showError("Erro ao excluir convênio.");
+    else {
+      showSuccess("Convênio removido!");
+      fetchInsurances();
+    }
   };
 
   const calculateMetrics = (data: any[]) => {
@@ -85,46 +114,55 @@ const ClinicAdmin = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <Card className="glass-card border-none">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                <span className="text-emerald-500 font-bold">R$</span> Faturamento Previsto
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black text-slate-900">R$ {metrics.faturamentoPrevisto.toLocaleString()}</div>
-              <p className="text-xs text-slate-400 mt-1">Baseado em agendamentos ativos</p>
-            </CardContent>
-          </Card>
+        <Tabs defaultValue="dashboard" className="space-y-8">
+          <TabsList className="bg-white p-1 rounded-2xl border shadow-sm">
+            <TabsTrigger value="dashboard" className="rounded-xl px-8">Dashboard</TabsTrigger>
+            <TabsTrigger value="appointments" className="rounded-xl px-8">Agendamentos</TabsTrigger>
+            <TabsTrigger value="insurances" className="rounded-xl px-8">Convênios</TabsTrigger>
+            <TabsTrigger value="integrations" className="rounded-xl px-8">Integrações</TabsTrigger>
+          </TabsList>
 
-          <Card className="glass-card border-none">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-blue-500" /> Conversão IA
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black text-slate-900">{metrics.conversaoIA}%</div>
-              <p className="text-xs text-slate-400 mt-1">Agendamentos via WhatsApp</p>
-            </CardContent>
-          </Card>
+          <TabsContent value="dashboard">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="glass-card border-none">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">R$</span> Faturamento Previsto
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-black text-slate-900">R$ {metrics.faturamentoPrevisto.toLocaleString()}</div>
+                  <p className="text-xs text-slate-400 mt-1">Baseado em agendamentos ativos</p>
+                </CardContent>
+              </Card>
 
-          <Card className="glass-card border-none bg-primary/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold text-primary flex items-center gap-2">
-                <Zap className="h-4 w-4" /> Receita Recuperada
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black text-primary">R$ {metrics.receitaRecuperada.toLocaleString()}</div>
-              <p className="text-xs text-primary/60 mt-1">Capturado fora do horário comercial</p>
-            </CardContent>
-          </Card>
-        </div>
+              <Card className="glass-card border-none">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-500" /> Conversão IA
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-black text-slate-900">{metrics.conversaoIA}%</div>
+                  <p className="text-xs text-slate-400 mt-1">Agendamentos via WhatsApp</p>
+                </CardContent>
+              </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          <div className="lg:col-span-2">
+              <Card className="glass-card border-none bg-primary/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold text-primary flex items-center gap-2">
+                    <Zap className="h-4 w-4" /> Receita Recuperada
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-black text-primary">R$ {metrics.receitaRecuperada.toLocaleString()}</div>
+                  <p className="text-xs text-primary/60 mt-1">Capturado fora do horário comercial</p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="appointments">
             <Card className="glass-card border-none overflow-hidden">
               <Table>
                 <TableHeader className="bg-slate-100/50">
@@ -162,56 +200,87 @@ const ClinicAdmin = () => {
                 </TableBody>
               </Table>
             </Card>
-          </div>
+          </TabsContent>
 
-          <div className="space-y-6">
-            <Card className="glass-card border-none">
-              <CardHeader>
-                <CardTitle className="text-xl font-black flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-primary" /> Integrações
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-white p-2 rounded-xl shadow-sm">
-                      <Globe className="h-6 w-6 text-blue-500" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900">Google Calendar</p>
-                      <p className="text-xs text-slate-500">Sincronize agendas médicas</p>
-                    </div>
-                  </div>
-                  <Button 
-                    onClick={handleConnectCalendar}
-                    className={`w-full rounded-xl font-bold ${isCalendarEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-900'}`}
-                  >
-                    {isCalendarEnabled ? (
-                      <><CheckCircle className="mr-2 h-4 w-4" /> Conectado</>
-                    ) : (
-                      <><Calendar className="mr-2 h-4 w-4" /> Conectar Agenda</>
-                    )}
+          <TabsContent value="insurances">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="glass-card border-none h-fit">
+                <CardHeader>
+                  <CardTitle className="text-xl font-black">Novo Convênio</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Input 
+                    placeholder="Nome do Convênio (ex: Unimed)" 
+                    value={newInsurance}
+                    onChange={(e) => setNewInsurance(e.target.value)}
+                    className="rounded-xl"
+                  />
+                  <Button onClick={handleAddInsurance} className="w-full rounded-xl font-bold">
+                    <Plus className="mr-2 h-4 w-4" /> Adicionar
                   </Button>
-                </div>
+                </CardContent>
+              </Card>
 
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 opacity-50">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-white p-2 rounded-xl shadow-sm">
-                      <Zap className="h-6 w-6 text-amber-500" />
+              <Card className="lg:col-span-2 glass-card border-none">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="font-bold">Nome do Convênio</TableHead>
+                      <TableHead className="text-right font-bold">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {insurances.map((ins) => (
+                      <TableRow key={ins.id}>
+                        <TableCell className="font-bold text-slate-900">{ins.name}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteInsurance(ins.id)} className="text-rose-500 hover:text-rose-600 hover:bg-rose-50">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="integrations">
+            <div className="max-w-md">
+              <Card className="glass-card border-none">
+                <CardHeader>
+                  <CardTitle className="text-xl font-black flex items-center gap-2">
+                    <Settings className="h-5 w-5 text-primary" /> Integrações
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="bg-white p-2 rounded-xl shadow-sm">
+                        <Globe className="h-6 w-6 text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">Google Calendar</p>
+                        <p className="text-xs text-slate-500">Sincronize agendas médicas</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-slate-900">WhatsApp API</p>
-                      <p className="text-xs text-slate-500">Lembretes automáticos</p>
-                    </div>
+                    <Button 
+                      onClick={handleConnectCalendar}
+                      className={`w-full rounded-xl font-bold ${isCalendarEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-900'}`}
+                    >
+                      {isCalendarEnabled ? (
+                        <><CheckCircle className="mr-2 h-4 w-4" /> Conectado</>
+                      ) : (
+                        <><Calendar className="mr-2 h-4 w-4" /> Conectar Agenda</>
+                      )}
+                    </Button>
                   </div>
-                  <Button disabled className="w-full rounded-xl font-bold bg-slate-900">
-                    Em breve
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

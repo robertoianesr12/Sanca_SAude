@@ -1,5 +1,12 @@
 -- Esquema Purificado Sanca Saúde
 
+CREATE TABLE public.insurances (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id UUID,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 CREATE TABLE public.specialties (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   clinic_id UUID,
@@ -47,6 +54,8 @@ CREATE TABLE public.appointments (
   client_id UUID REFERENCES public.clients(id),
   doctor_id UUID REFERENCES public.doctors(id),
   service_id UUID REFERENCES public.services(id),
+  insurance_id UUID REFERENCES public.insurances(id),
+  payment_method TEXT DEFAULT 'private',
   service TEXT,
   appointment_date TIMESTAMP WITH TIME ZONE NOT NULL,
   status TEXT DEFAULT 'scheduled',

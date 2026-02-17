@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -13,10 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
-import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
-import { Loader2, Stethoscope, CalendarDays, User, Phone, Fingerprint, CheckCircle2, Calendar as CalendarIcon, Download } from "lucide-react";
+import { formatPhone, stripNonDigits } from "@/lib/formatters";
+import { Loader2, Stethoscope, CalendarDays, User, Phone, CheckCircle2, Calendar as CalendarIcon, Download, MessageCircle } from "lucide-react";
 import { ptBR } from "date-fns/locale";
 import { format } from "date-fns";
 
@@ -32,60 +34,41 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [appointmentId, setAppointmentId] = useState("");
   const [contactName, setContactName] = useState("");
-  const [contactCpf, setContactCpf] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("private");
+  const [selectedInsuranceId, setSelectedInsuranceId] = useState<string>("");
+  const [insurances, setInsurances] = useState<any[]>([]);
 
-  const generateGoogleCalendarLink = () => {
-    const [hours, minutes] = selectedTime.split(":").map(Number);
-    const start = new Date(selectedDate);
-    start.setHours(hours, minutes, 0, 0);
-    const end = new Date(start.getTime() + (service?.duration || 60) * 60000);
-    
-    const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
-    const title = encodeURIComponent(`Consulta: ${service?.name} - Sanca Saúde`);
-    const details = encodeURIComponent(`Olá ${contactName}, sua consulta está agendada na Sanca Saúde.`);
-    const location = encodeURIComponent("Av. São Carlos, 1000, Centro, São Carlos - SP");
-    
-    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}&location=${location}`;
-  };
+  useEffect(() => {
+    if (isOpen) {
+      const fetchInsurances = async () => {
+        const { data } = await supabase.from('insurances').select('*').order('name');
+        setInsurances(data || []);
+      };
+      fetchInsurances();
+    }
+  }, [isOpen]);
 
-  const downloadICal = () => {
-    const [hours, minutes] = selectedTime.split(":").map(Number);
-    const start = new Date(selectedDate);
-    start.setHours(hours, minutes, 0, 0);
-    const end = new Date(start.getTime() + (service?.duration || 60) * 60000);
-    
-    const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
-    const icsContent = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "BEGIN:VEVENT",
-      `DTSTART:${fmt(start)}`,
-      `DTEND:${fmt(end)}`,
-      `SUMMARY:Consulta: ${service?.name} - Sanca Saúde`,
-      `DESCRIPTION:Olá ${contactName}, sua consulta está agendada na Sanca Saúde.`,
-      "LOCATION:Av. São Carlos, 1000, Centro, São Carlos - SP",
-      "END:VEVENT",
-      "END:VCALENDAR"
-    ].join("\r\n");
-
-    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
-    const link = document.createElement("a");
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute("download", "consulta-sanca-saude.ics");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const generateWhatsAppLink = () => {
+    const insuranceName = insurances.find(i => i.id === selectedInsuranceId)?.name || "";
+    const typeLabel = paymentMethod === 'private' ? 'Particular' : `Convênio (${insuranceName})`;
+    const message = encodeURIComponent(
+      `Olá Julia! Sou ${contactName}. Gostaria de confirmar meu agendamento para ${service?.name} no dia ${format(selectedDate, "dd/MM")} às ${selectedTime}h. Tipo: ${typeLabel}.`
+    );
+    return `https://wa.me/551633334444?text=${message}`;
   };
 
   const handleBooking = async () => {
     const phoneDigits = stripNonDigits(contactPhone);
-    const cpfDigits = stripNonDigits(contactCpf);
 
     if (!contactName.trim() || phoneDigits.length < 10) {
       showError("Por favor, preencha Nome e WhatsApp corretamente.");
+      return;
+    }
+
+    if (paymentMethod === 'insurance' && !selectedInsuranceId) {
+      showError("Selecione seu convênio.");
       return;
     }
 
@@ -101,41 +84,48 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
       const appointmentDate = new Date(selectedDate);
       appointmentDate.setHours(hours, minutes, 0, 0);
 
-      const response = await fetch("https://zwoqzptpoekzwracicbm.supabase.co/functions/v1/submit-booking-request", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabase.auth.getSession()}`
-        },
-        body: JSON.stringify({
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .upsert({ 
+          phone: phoneDigits, 
+          name: contactName.trim(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'phone' })
+        .select().single();
+
+      if (clientError) throw clientError;
+
+      const { error: appError } = await supabase
+        .from('appointments')
+        .insert({
           service_id: service?.id,
+          client_id: clientData.id,
           appointment_date: appointmentDate.toISOString(),
-          contact: {
-            name: contactName.trim(),
-            phone: phoneDigits,
-            cpf: cpfDigits || null
-          },
-          source: "web_portal"
-        })
-      });
+          payment_method: paymentMethod,
+          insurance_id: paymentMethod === 'insurance' ? selectedInsuranceId : null,
+          status: 'requested',
+          service: service?.name,
+          notes: { source: "web_portal" }
+        });
 
-      const result = await response.json();
+      if (appError) throw appError;
 
-      if (!response.ok) throw new Error(result.error || "Erro ao processar agendamento.");
-
-      setAppointmentId(result.appointmentId);
       setIsSuccess(true);
       showSuccess("Solicitação enviada com sucesso!");
 
     } catch (err: any) {
-      console.error("Erro no agendamento:", err);
       showError(err.message || "Erro ao processar solicitação.");
     } finally {
       setLoading(false);
     }
   };
 
-  const timeSlots = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
+  // Time slots de 30 em 30 min, das 08:00 às 18:00
+  const timeSlots = [];
+  for (let h = 8; h <= 18; h++) {
+    timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
+    if (h < 18) timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
+  }
 
   if (isSuccess) {
     return (
@@ -143,41 +133,33 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
         <DialogContent className="sm:max-w-[500px] glass-card rounded-[2.5rem] p-0 overflow-hidden border-none">
           <div className="bg-emerald-500 p-12 text-white text-center">
             <CheckCircle2 className="h-20 w-20 mx-auto mb-6 animate-in zoom-in duration-500" />
-            <DialogTitle className="text-3xl font-black mb-2">Agendado!</DialogTitle>
+            <DialogTitle className="text-3xl font-black mb-2">Solicitado!</DialogTitle>
             <DialogDescription className="text-emerald-100 text-lg">
-              Sua solicitação para <strong>{service?.name}</strong> foi enviada.
+              Sua consulta para <strong>{service?.name}</strong> está sendo processada.
             </DialogDescription>
           </div>
           <div className="p-8 space-y-4">
             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6">
               <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Detalhes</p>
               <p className="text-xl font-bold text-slate-900">{format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}</p>
-              <p className="text-slate-600">Às {selectedTime}h</p>
+              <p className="text-slate-600">Às {selectedTime}h · {paymentMethod === 'private' ? 'Particular' : 'Convênio'}</p>
             </div>
 
             <Button 
               asChild
-              className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-primary text-white font-bold"
+              className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg shadow-lg shadow-emerald-100"
             >
-              <a href={generateGoogleCalendarLink()} target="_blank" rel="noreferrer">
-                <CalendarIcon className="mr-2 h-5 w-5" /> Adicionar ao Google Agenda
+              <a href={generateWhatsAppLink()} target="_blank" rel="noreferrer">
+                <MessageCircle className="mr-2 h-6 w-6" /> Falar com Julia (WhatsApp)
               </a>
             </Button>
 
             <Button 
-              variant="outline"
-              onClick={downloadICal}
-              className="w-full h-14 rounded-2xl border-2 font-bold"
-            >
-              <Download className="mr-2 h-5 w-5" /> Baixar Lembrete (iCal)
-            </Button>
-
-            <Button 
               variant="ghost"
-              onClick={() => navigate(`/checkout?appointment_id=${appointmentId}`)}
+              onClick={onClose}
               className="w-full h-14 rounded-2xl font-bold text-slate-500"
             >
-              Ir para o Checkout
+              Fechar
             </Button>
           </div>
         </DialogContent>
@@ -207,20 +189,10 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
             <div className="relative">
               <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
               <Input
-                placeholder="Nome Completo"
+                placeholder="Seu Nome Completo"
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
                 className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200 focus:ring-primary"
-              />
-            </div>
-            <div className="relative">
-              <Fingerprint className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
-              <Input
-                placeholder="CPF (Opcional)"
-                value={contactCpf}
-                onChange={(e) => setContactCpf(formatCpf(e.target.value))}
-                className="pl-12 h-12 rounded-2xl bg-slate-50 border-slate-200"
-                maxLength={14}
               />
             </div>
             <div className="relative">
@@ -233,6 +205,27 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
                 maxLength={15}
               />
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-700">Tipo de Atendimento</label>
+            <ToggleGroup type="single" value={paymentMethod} onValueChange={(v) => v && setPaymentMethod(v)} className="justify-start gap-2">
+              <ToggleGroupItem value="private" className="rounded-xl px-6 border-2 data-[state=on]:bg-primary data-[state=on]:text-white">Particular</ToggleGroupItem>
+              <ToggleGroupItem value="insurance" className="rounded-xl px-6 border-2 data-[state=on]:bg-primary data-[state=on]:text-white">Convênio</ToggleGroupItem>
+            </ToggleGroup>
+
+            {paymentMethod === 'insurance' && (
+              <Select value={selectedInsuranceId} onValueChange={setSelectedInsuranceId}>
+                <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="Selecione seu convênio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {insurances.map((ins) => (
+                    <SelectItem key={ins.id} value={ins.id}>{ins.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -275,7 +268,7 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
             disabled={loading}
             className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-primary text-white font-bold text-lg btn-apple"
           >
-            {loading ? <Loader2 className="animate-spin mr-2" /> : "Confirmar Agendamento"}
+            {loading ? <Loader2 className="animate-spin mr-2" /> : "Finalizar Agendamento"}
           </Button>
         </DialogFooter>
       </DialogContent>
