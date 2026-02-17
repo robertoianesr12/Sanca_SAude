@@ -13,6 +13,9 @@ CREATE TABLE public.doctors (
   specialty_id UUID REFERENCES public.specialties(id),
   crm TEXT,
   bio TEXT,
+  google_calendar_id TEXT,
+  google_refresh_token TEXT,
+  is_calendar_enabled BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

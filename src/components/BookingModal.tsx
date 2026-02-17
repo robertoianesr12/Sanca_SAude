@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { formatCpf, formatPhone, stripNonDigits } from "@/lib/formatters";
-import { Loader2, Stethoscope, CalendarDays, User, Phone, Fingerprint } from "lucide-react";
+import { Loader2, Stethoscope, CalendarDays, User, Phone, Fingerprint, CheckCircle2, Calendar as CalendarIcon, Download } from "lucide-react";
 import { ptBR } from "date-fns/locale";
+import { format } from "date-fns";
 
 interface BookingModalProps {
   service: any;
@@ -30,9 +31,54 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [appointmentId, setAppointmentId] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactCpf, setContactCpf] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+
+  const generateGoogleCalendarLink = () => {
+    const [hours, minutes] = selectedTime.split(":").map(Number);
+    const start = new Date(selectedDate);
+    start.setHours(hours, minutes, 0, 0);
+    const end = new Date(start.getTime() + (service?.duration || 60) * 60000);
+    
+    const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
+    const title = encodeURIComponent(`Consulta: ${service?.name} - Sanca Saúde`);
+    const details = encodeURIComponent(`Olá ${contactName}, sua consulta está agendada na Sanca Saúde.`);
+    const location = encodeURIComponent("Av. São Carlos, 1000, Centro, São Carlos - SP");
+    
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}&location=${location}`;
+  };
+
+  const downloadICal = () => {
+    const [hours, minutes] = selectedTime.split(":").map(Number);
+    const start = new Date(selectedDate);
+    start.setHours(hours, minutes, 0, 0);
+    const end = new Date(start.getTime() + (service?.duration || 60) * 60000);
+    
+    const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
+    const icsContent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      `DTSTART:${fmt(start)}`,
+      `DTEND:${fmt(end)}`,
+      `SUMMARY:Consulta: ${service?.name} - Sanca Saúde`,
+      `DESCRIPTION:Olá ${contactName}, sua consulta está agendada na Sanca Saúde.`,
+      "LOCATION:Av. São Carlos, 1000, Centro, São Carlos - SP",
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute("download", "consulta-sanca-saude.ics");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleBooking = async () => {
     const phoneDigits = stripNonDigits(contactPhone);
@@ -77,12 +123,9 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
 
       if (!response.ok) throw new Error(result.error || "Erro ao processar agendamento.");
 
-      showSuccess("Solicitação enviada! Redirecionando para o checkout...");
-      
-      setTimeout(() => {
-        onClose();
-        navigate(`/checkout?appointment_id=${result.appointmentId}`);
-      }, 1500);
+      setAppointmentId(result.appointmentId);
+      setIsSuccess(true);
+      showSuccess("Solicitação enviada com sucesso!");
 
     } catch (err: any) {
       console.error("Erro no agendamento:", err);
@@ -93,6 +136,54 @@ const BookingModal = ({ service, isOpen, onClose }: BookingModalProps) => {
   };
 
   const timeSlots = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
+
+  if (isSuccess) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[500px] glass-card rounded-[2.5rem] p-0 overflow-hidden border-none">
+          <div className="bg-emerald-500 p-12 text-white text-center">
+            <CheckCircle2 className="h-20 w-20 mx-auto mb-6 animate-in zoom-in duration-500" />
+            <DialogTitle className="text-3xl font-black mb-2">Agendado!</DialogTitle>
+            <DialogDescription className="text-emerald-100 text-lg">
+              Sua solicitação para <strong>{service?.name}</strong> foi enviada.
+            </DialogDescription>
+          </div>
+          <div className="p-8 space-y-4">
+            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6">
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Detalhes</p>
+              <p className="text-xl font-bold text-slate-900">{format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}</p>
+              <p className="text-slate-600">Às {selectedTime}h</p>
+            </div>
+
+            <Button 
+              asChild
+              className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-primary text-white font-bold"
+            >
+              <a href={generateGoogleCalendarLink()} target="_blank" rel="noreferrer">
+                <CalendarIcon className="mr-2 h-5 w-5" /> Adicionar ao Google Agenda
+              </a>
+            </Button>
+
+            <Button 
+              variant="outline"
+              onClick={downloadICal}
+              className="w-full h-14 rounded-2xl border-2 font-bold"
+            >
+              <Download className="mr-2 h-5 w-5" /> Baixar Lembrete (iCal)
+            </Button>
+
+            <Button 
+              variant="ghost"
+              onClick={() => navigate(`/checkout?appointment_id=${appointmentId}`)}
+              className="w-full h-14 rounded-2xl font-bold text-slate-500"
+            >
+              Ir para o Checkout
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
